@@ -38,25 +38,8 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
   // Validate UTR if provided (must be 12 digits when present for UPI_QR)
   const cleanUtr = utrNumber ? String(utrNumber).trim() : '';
-  if (cleanUtr) {
-    if (!/^\d{12}$/.test(cleanUtr)) {
-      return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
-    }
-
-    // Prevent duplicate UTR reuse across orders
-    const duplicateUtrOrder = await prisma.order.findFirst({
-      where: {
-        utrNumber: cleanUtr,
-        status: { not: 'CANCELLED' },
-      },
-    });
-
-    if (duplicateUtrOrder) {
-      return res.status(400).json({
-        error: 'Duplicate UTR Number',
-        message: 'This UTR number has already been submitted for another order. Please provide a unique bank transaction reference.',
-      });
-    }
+  if (cleanUtr && !/^\d{12}$/.test(cleanUtr)) {
+    return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
   }
 
   const normalizedPaymentMethod =
@@ -162,6 +145,22 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
     // Perform database writes in transaction
     const result = await prisma.$transaction(async (tx) => {
+      // 0. Enforce duplicate UTR uniqueness inside the write transaction
+      if (cleanUtr) {
+        const existingUtrOrder = await tx.order.findFirst({
+          where: {
+            utrNumber: cleanUtr,
+            status: { not: 'CANCELLED' },
+          },
+        });
+
+        if (existingUtrOrder) {
+          const duplicateError: any = new Error('Duplicate UTR Number');
+          duplicateError.code = 'DUPLICATE_UTR';
+          throw duplicateError;
+        }
+      }
+
       // 1. Create order
       const order = await tx.order.create({
         data: {
@@ -217,7 +216,13 @@ router.post('/checkout', async (req: Request, res: Response) => {
       order: result,
       whatsappSimulated: !customerPhone,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'DUPLICATE_UTR' || error?.message === 'Duplicate UTR Number') {
+      return res.status(400).json({
+        error: 'Duplicate UTR Number',
+        message: 'This UTR number has already been submitted for another order. Please provide a unique bank transaction reference.',
+      });
+    }
     console.error('Checkout error:', error);
     res.status(500).json({ error: 'Checkout failed due to server error' });
   }
@@ -468,7 +473,9 @@ router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: R
 
   const validPaymentStatuses = ['PAID', 'FAILED', 'PENDING', 'VERIFICATION'];
   if (!paymentStatus || !validPaymentStatuses.includes(paymentStatus)) {
-    return res.status(400).json({ error: 'Invalid or missing paymentStatus (must be PAID or FAILED)' });
+    return res.status(400).json({
+      error: 'Invalid or missing paymentStatus (must be one of: PAID, FAILED, PENDING, VERIFICATION)',
+    });
   }
 
   try {
@@ -478,6 +485,14 @@ router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: R
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Prevent cancelled orders from being marked as PAID
+    if (order.status === 'CANCELLED' && paymentStatus === 'PAID') {
+      return res.status(400).json({
+        error: 'Cannot mark cancelled order as PAID',
+        message: 'This order has already been cancelled. Cancelled orders cannot be updated to PAID status.',
+      });
     }
 
     const updatedOrder = await prisma.order.update({
