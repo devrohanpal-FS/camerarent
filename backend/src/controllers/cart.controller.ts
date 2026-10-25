@@ -2,6 +2,11 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { checkProductAvailability } from '../services/availability.service';
+import {
+  addToCartSchema,
+  updateCartSchema,
+  validateRentalDates,
+} from '../utils/cart-validator';
 
 const router = Router();
 
@@ -31,19 +36,16 @@ router.get('/', async (req: Request, res: Response) => {
         const check = await checkProductAvailability(item.productId, item.startDate, item.endDate, item.quantity);
         
         // Calculate rental duration in days
-        const diffTime = Math.abs(item.endDate.getTime() - item.startDate.getTime());
+        const diffTime = Math.max(0, item.endDate.getTime() - item.startDate.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive of start & end day
 
         // Calculate rental price based on daily/weekly rates
-        // If duration >= 7, calculate using weekly rate primarily
-        let pricePerDay = item.product.dailyRate;
         let totalCost = 0;
         
         if (diffDays >= 7) {
           const weeks = Math.floor(diffDays / 7);
           const extraDays = diffDays % 7;
           totalCost = (weeks * item.product.weeklyRate) + (extraDays * item.product.dailyRate);
-          pricePerDay = totalCost / diffDays;
         } else {
           totalCost = diffDays * item.product.dailyRate;
         }
@@ -70,27 +72,43 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Add Item to Cart
+// Add Item to Cart (Strict Zod validation on quantity, dates, and stock)
 router.post('/', async (req: Request, res: Response) => {
   const userId = req.user!.id;
-  const { productId, startDate, endDate, quantity } = req.body;
 
-  if (!productId || !startDate || !endDate) {
-    return res.status(400).json({ error: 'Product ID, start date, and end date are required' });
+  // 1. Validate request payload using Zod schema
+  const parseResult = addToCartSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    const firstIssue = parseResult.error.issues[0];
+    return res.status(400).json({
+      error: firstIssue?.message || 'Invalid cart payload',
+      field: firstIssue?.path?.join('.'),
+    });
   }
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const qty = Number(quantity) || 1;
+  const { productId, startDate, endDate, quantity } = parseResult.data;
+
+  // 2. Validate rental dates (no past dates, end >= start, duration <= 30 days)
+  const dateCheck = validateRentalDates(startDate, endDate);
+  if (!dateCheck.valid || !dateCheck.startDate || !dateCheck.endDate) {
+    return res.status(400).json({ error: dateCheck.error || 'Invalid rental dates' });
+  }
+
+  const start = dateCheck.startDate;
+  const end = dateCheck.endDate;
 
   try {
-    // 1. Verify product exists
+    // 3. Verify product exists and has stock
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // 2. Check if identical item is already in cart for overlapping dates
+    if (product.totalStock <= 0) {
+      return res.status(400).json({ error: 'Product is currently out of stock' });
+    }
+
+    // 4. Check if identical item is already in cart for same dates
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         userId,
@@ -100,8 +118,28 @@ router.post('/', async (req: Request, res: Response) => {
       },
     });
 
-    // 3. Verify availability (for the combined quantity if already in cart)
-    const check = await checkProductAvailability(productId, start, end, existingItem ? existingItem.quantity + qty : qty);
+    const combinedQty = existingItem ? existingItem.quantity + quantity : quantity;
+
+    // 5. Enforce max cap of 10 units per equipment item
+    if (combinedQty > 10) {
+      return res.status(400).json({
+        error: 'Quantity Limit Exceeded',
+        message: existingItem
+          ? `Adding ${quantity} units would bring your cart total to ${combinedQty}, which exceeds the maximum allowable limit of 10 units per item.`
+          : 'Quantity cannot exceed 10 units per item.',
+      });
+    }
+
+    // 6. Enforce product total warehouse stock limit
+    if (combinedQty > product.totalStock) {
+      return res.status(400).json({
+        error: 'Stock Limit Exceeded',
+        message: `Requested quantity (${combinedQty}) exceeds total available warehouse stock (${product.totalStock}).`,
+      });
+    }
+
+    // 7. Verify inventory availability against booked orders
+    const check = await checkProductAvailability(productId, start, end, combinedQty);
     if (!check.available) {
       return res.status(400).json({ error: check.reason });
     }
@@ -110,7 +148,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (existingItem) {
       cartItem = await prisma.cartItem.update({
         where: { id: existingItem.id },
-        data: { quantity: existingItem.quantity + qty },
+        data: { quantity: combinedQty },
       });
     } else {
       cartItem = await prisma.cartItem.create({
@@ -119,7 +157,7 @@ router.post('/', async (req: Request, res: Response) => {
           productId,
           startDate: start,
           endDate: end,
-          quantity: qty,
+          quantity,
         },
       });
     }
@@ -134,27 +172,51 @@ router.post('/', async (req: Request, res: Response) => {
 // Update Cart Item (Dates or Quantity)
 router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { startDate, endDate, quantity } = req.body;
+
+  // 1. Validate request payload using Zod schema
+  const parseResult = updateCartSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    const firstIssue = parseResult.error.issues[0];
+    return res.status(400).json({
+      error: firstIssue?.message || 'Invalid cart update payload',
+      field: firstIssue?.path?.join('.'),
+    });
+  }
+
+  const { startDate, endDate, quantity } = parseResult.data;
 
   try {
     const cartItem = await prisma.cartItem.findUnique({
       where: { id },
+      include: { product: true },
     });
 
     if (!cartItem || cartItem.userId !== req.user!.id) {
       return res.status(404).json({ error: 'Cart item not found' });
     }
 
-    const start = startDate ? new Date(startDate) : cartItem.startDate;
-    const end = endDate ? new Date(endDate) : cartItem.endDate;
-    const qty = quantity !== undefined ? Number(quantity) : cartItem.quantity;
+    const startInput = startDate || cartItem.startDate;
+    const endInput = endDate || cartItem.endDate;
 
-    if (qty <= 0) {
-      await prisma.cartItem.delete({ where: { id } });
-      return res.json({ message: 'Cart item removed successfully' });
+    // Validate dates
+    const dateCheck = validateRentalDates(startInput, endInput);
+    if (!dateCheck.valid || !dateCheck.startDate || !dateCheck.endDate) {
+      return res.status(400).json({ error: dateCheck.error || 'Invalid rental dates' });
     }
 
-    // If dates or quantity changed, check availability
+    const start = dateCheck.startDate;
+    const end = dateCheck.endDate;
+    const qty = quantity !== undefined ? quantity : cartItem.quantity;
+
+    // Validate stock cap
+    if (qty > cartItem.product.totalStock) {
+      return res.status(400).json({
+        error: 'Stock Limit Exceeded',
+        message: `Quantity (${qty}) exceeds available warehouse stock (${cartItem.product.totalStock}).`,
+      });
+    }
+
+    // Verify availability
     const check = await checkProductAvailability(cartItem.productId, start, end, qty);
     if (!check.available) {
       return res.status(400).json({ error: check.reason });

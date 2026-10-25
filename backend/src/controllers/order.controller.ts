@@ -72,8 +72,61 @@ router.post('/checkout', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Your cart is empty' });
     }
 
-    // Verify availability for all items in a transaction-safe way
+    // Validate all cart items for data integrity & business rules before checkout
+    const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
     for (const item of cartItems) {
+      // 1. Strict quantity check (integer 1..10)
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 10) {
+        return res.status(400).json({
+          error: 'Corrupted or Invalid Cart Item',
+          message: `Item "${item.product?.name || item.productId}" has an invalid quantity (${item.quantity}). Quantity must be an integer between 1 and 10.`,
+        });
+      }
+
+      // 2. Strict dates check
+      const start = new Date(item.startDate);
+      const end = new Date(item.endDate);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({
+          error: 'Corrupted or Invalid Cart Item',
+          message: `Item "${item.product?.name}" contains invalid date values.`,
+        });
+      }
+
+      if (start < todayMidnight) {
+        return res.status(400).json({
+          error: 'Corrupted or Invalid Cart Item',
+          message: `Rental start date for "${item.product?.name}" is in the past. Please update your cart dates.`,
+        });
+      }
+
+      if (end < start) {
+        return res.status(400).json({
+          error: 'Corrupted or Invalid Cart Item',
+          message: `Rental end date for "${item.product?.name}" is before the start date.`,
+        });
+      }
+
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays > 30) {
+        return res.status(400).json({
+          error: 'Corrupted or Invalid Cart Item',
+          message: `Rental duration for "${item.product?.name}" (${diffDays} days) exceeds maximum allowable 30 days.`,
+        });
+      }
+
+      // 3. Stock limit check
+      if (item.quantity > item.product.totalStock) {
+        return res.status(400).json({
+          error: 'Stock Limit Exceeded',
+          message: `Requested quantity for "${item.product.name}" (${item.quantity}) exceeds warehouse stock (${item.product.totalStock}).`,
+        });
+      }
+
+      // 4. Verify availability for all items in a transaction-safe way
       const check = await checkProductAvailability(item.productId, item.startDate, item.endDate, item.quantity);
       if (!check.available) {
         return res.status(400).json({ 
@@ -89,7 +142,7 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
     const orderItemsData = cartItems.map((item) => {
       // Calculate rental duration in days
-      const diffTime = Math.abs(item.endDate.getTime() - item.startDate.getTime());
+      const diffTime = item.endDate.getTime() - item.startDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
       // Price calculation with daily/weekly rates

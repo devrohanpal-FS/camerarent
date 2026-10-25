@@ -146,7 +146,9 @@ async function run() {
     { url: 'https://gpcamerarental.com@evil.com/pic.jpg', expected: 403, label: 'Userinfo bypass (gpcamerarental.com@evil.com)' },
     { url: 'https://evil.com#gpcamerarental.com', expected: 403, label: 'Fragment bypass (evil.com#gpcamerarental.com)' },
     { url: 'http://2130706433/', expected: 400, label: 'Integer IP representation (http://2130706433/)' },
-    { url: 'http://[::1]/', expected: 400, label: 'Bracketed IPv6 loopback (http://[::1]/)' }
+    { url: 'http://[::1]/', expected: 400, label: 'Bracketed IPv6 loopback (http://[::1]/)' },
+    { url: 'https://2130706433/', expected: 403, label: 'HTTPS Integer IP representation (https://2130706433/)' },
+    { url: 'https://[::1]/', expected: 403, label: 'HTTPS Bracketed IPv6 loopback (https://[::1]/)' }
   ];
 
   for (const tc of bypassUrls) {
