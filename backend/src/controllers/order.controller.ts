@@ -23,20 +23,42 @@ function generateOrderNumber(): string {
 // 1. Checkout Endpoint
 router.post('/checkout', async (req: Request, res: Response) => {
   const userId = req.user!.id;
-  const { deliveryAddress, deliveryDetails } = req.body;
+  const {
+    deliveryAddress,
+    deliveryDetails,
+    paymentId,
+    paymentMethod,
+    utrNumber,
+    paymentProofUrl,
+  } = req.body;
 
   if (!deliveryAddress) {
     return res.status(400).json({ error: 'Delivery address is required' });
   }
 
+  // Validate UTR if provided (must be 12 digits when present for UPI_QR)
+  const cleanUtr = utrNumber ? String(utrNumber).trim() : '';
+  if (cleanUtr && !/^\d{12}$/.test(cleanUtr)) {
+    return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
+  }
+
+  const normalizedPaymentMethod =
+    paymentMethod === 'UPI_QR' || paymentMethod === 'QR'
+      ? 'UPI_QR'
+      : 'COD';
+
+  // Server determines initial payment status:
+  // Client-submitted paymentStatus is ignored to prevent tampering.
+  // If UTR (or payment proof) is provided for UPI_QR, status is VERIFICATION, otherwise PENDING.
+  // Transition to PAID is strictly reserved for Admin via PATCH /api/orders/:id/payment.
+  const normalizedPaymentStatus =
+    normalizedPaymentMethod === 'UPI_QR' && (cleanUtr || paymentProofUrl)
+      ? 'VERIFICATION'
+      : 'PENDING';
+
   try {
-    // Check KYC status of the user
-    if (req.user!.kycStatus !== 'APPROVED') {
-      return res.status(400).json({ 
-        error: 'KYC Verification Required', 
-        message: 'Your account KYC status must be APPROVED before renting equipment.' 
-      });
-    }
+    const isKycApproved = req.user!.kycStatus === 'APPROVED';
+    const initialOrderStatus = isKycApproved ? 'PLACED' : 'PENDING_APPROVAL';
 
     // Fetch user's cart items
     const cartItems = await prisma.cartItem.findMany({
@@ -115,6 +137,12 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
     const orderNumber = generateOrderNumber();
 
+    const formattedDetails = [
+      deliveryDetails || '',
+      `[Payment Method: ${normalizedPaymentMethod}]`,
+      cleanUtr ? `[UTR: ${cleanUtr}]` : paymentId ? `[Ref/Txn: ${paymentId}]` : '',
+    ].filter(Boolean).join(' - ');
+
     // Perform database writes in transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create order
@@ -122,13 +150,18 @@ router.post('/checkout', async (req: Request, res: Response) => {
         data: {
           orderNumber,
           userId,
-          status: 'PLACED',
+          status: initialOrderStatus,
           totalRentalCost: finalRentalCost,
           totalDeposit,
           totalTax,
           grandTotal,
           deliveryAddress,
-          deliveryDetails,
+          deliveryDetails: formattedDetails,
+          paymentId: paymentId || (normalizedPaymentMethod === 'UPI_QR' ? (cleanUtr || 'UPI_QR_PENDING') : 'COD'),
+          paymentMethod: normalizedPaymentMethod,
+          paymentStatus: normalizedPaymentStatus,
+          utrNumber: cleanUtr || null,
+          paymentProofUrl: paymentProofUrl ? String(paymentProofUrl) : null,
           kycDocUrl: req.user!.kycDocUrl, // Snapshot the KYC doc link
         },
       });
@@ -411,6 +444,52 @@ router.put('/:id/status', requireRole(['ADMIN', 'VENDOR']), async (req: Request,
   }
 });
 
+// 5b. Update Order Payment Status (ADMIN only: PAID / FAILED)
+router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { paymentStatus } = req.body; // PAID, FAILED, PENDING, VERIFICATION
+
+  const validPaymentStatuses = ['PAID', 'FAILED', 'PENDING', 'VERIFICATION'];
+  if (!paymentStatus || !validPaymentStatuses.includes(paymentStatus)) {
+    return res.status(400).json({ error: 'Invalid or missing paymentStatus (must be PAID or FAILED)' });
+  }
+
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id },
+      data: { paymentStatus },
+    });
+
+    await createNotification(
+      order.userId,
+      `Payment ${paymentStatus === 'PAID' ? 'Confirmed' : 'Status Updated'}`,
+      `Payment status for your order #${order.orderNumber} is now ${paymentStatus}.`,
+      'ORDER_STATUS'
+    );
+    await notifyAdmins(
+      'Order Payment Updated',
+      `Order #${order.orderNumber} payment status changed to ${paymentStatus}.`,
+      'ORDER_STATUS'
+    );
+
+    res.json({
+      message: `Order payment status updated to ${paymentStatus}`,
+      order: updatedOrder,
+    });
+  } catch (error) {
+    console.error('Update payment status error:', error);
+    res.status(500).json({ error: 'Failed to update order payment status' });
+  }
+});
+
 // 6. Request Cancellation (Customer)
 router.post('/:id/cancel', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -428,6 +507,17 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 
     if (!order || order.userId !== userId) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Cancellation rule: cancellation request can only be submitted within 12 hours of order confirmation/creation
+    const orderCreatedAt = new Date(order.createdAt).getTime();
+    const elapsedHours = (Date.now() - orderCreatedAt) / (1000 * 60 * 60);
+
+    if (elapsedHours > 12) {
+      return res.status(400).json({
+        error: 'Cancellation Window Expired',
+        message: 'Cancellation requests are only allowed within 12 hours of order confirmation. The 12-hour cancellation window for this order has expired.',
+      });
     }
 
     // Cancellation rule: cannot cancel if order is already dispatched/active/returned/completed
