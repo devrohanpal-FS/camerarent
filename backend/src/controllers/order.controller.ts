@@ -38,8 +38,25 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
   // Validate UTR if provided (must be 12 digits when present for UPI_QR)
   const cleanUtr = utrNumber ? String(utrNumber).trim() : '';
-  if (cleanUtr && !/^\d{12}$/.test(cleanUtr)) {
-    return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
+  if (cleanUtr) {
+    if (!/^\d{12}$/.test(cleanUtr)) {
+      return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
+    }
+
+    // Prevent duplicate UTR reuse across orders
+    const duplicateUtrOrder = await prisma.order.findFirst({
+      where: {
+        utrNumber: cleanUtr,
+        status: { not: 'CANCELLED' },
+      },
+    });
+
+    if (duplicateUtrOrder) {
+      return res.status(400).json({
+        error: 'Duplicate UTR Number',
+        message: 'This UTR number has already been submitted for another order. Please provide a unique bank transaction reference.',
+      });
+    }
   }
 
   const normalizedPaymentMethod =
