@@ -1,11 +1,18 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import dns from 'dns';
-import net from 'net';
 import { prisma } from '../db';
 import { checkProductAvailability, getUnavailableDates } from '../services/availability.service';
 import { authMiddleware, requireRole } from '../middleware/auth.middleware';
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_PROXY_DOMAINS,
+  imageProxyLimiter,
+  MAX_PROXY_IMAGE_SIZE,
+  PayloadTooLargeError,
+  streamImageWithLimit,
+  validateDns,
+} from '../utils/ssrf';
 
 const router = Router();
 
@@ -184,56 +191,8 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-function isPrivateIp(ip: string): boolean {
-  if (net.isIPv4(ip)) {
-    const parts = ip.split('.').map(Number);
-    // 127.0.0.0/8 (Loopback)
-    if (parts[0] === 127) return true;
-    // 10.0.0.0/8 (Private network)
-    if (parts[0] === 10) return true;
-    // 172.16.0.0/12 (Private network: 172.16.0.0 - 172.31.255.255)
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    // 192.168.0.0/16 (Private network)
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    // 169.254.0.0/16 (Link-local / Cloud metadata service)
-    if (parts[0] === 169 && parts[1] === 254) return true;
-    // 0.0.0.0/8 (Current network)
-    if (parts[0] === 0) return true;
-    // 100.64.0.0/10 (Carrier-grade NAT)
-    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
-    return false;
-  }
-  if (net.isIPv6(ip)) {
-    const normalized = ip.toLowerCase();
-    // ::1 or :: (Loopback / unspecified)
-    if (normalized === '::1' || normalized === '::') return true;
-    // Unique local address fc00::/7 (fc00... or fd00...)
-    if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
-    // Link-local fe80::/10
-    if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) return true;
-    // IPv4-mapped IPv6 address (::ffff:127.0.0.1)
-    if (normalized.startsWith('::ffff:')) {
-      const ipv4Part = ip.slice(7);
-      return isPrivateIp(ipv4Part);
-    }
-    return false;
-  }
-  return true; // Unknown/invalid IP format, treat as unsafe
-}
-
-const ALLOWED_PROXY_DOMAINS = ['gpcamerarental.com'];
-const ALLOWED_IMAGE_MIME_TYPES = [
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'image/avif',
-];
-const MAX_PROXY_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB maximum
-
 // Proxy remote images to avoid browser hotlinking blocks (Protected against SSRF)
-router.get('/proxy-image', async (req: Request, res: Response) => {
+router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response) => {
   const { url } = req.query;
 
   if (!url || typeof url !== 'string') {
@@ -247,37 +206,28 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid URL format' });
   }
 
-  // 1. Enforce HTTPS/HTTP protocols only
-  if (targetUrl.protocol !== 'https:' && targetUrl.protocol !== 'http:') {
-    return res.status(400).json({ error: 'Invalid URL protocol. Only HTTP and HTTPS are permitted.' });
+  // 1. Enforce HTTPS only (no HTTP allowed since no DB products use HTTP)
+  if (targetUrl.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Invalid URL protocol. Only HTTPS is permitted.' });
   }
 
-  // 2. Enforce strict domain allowlist
+  // 2. Enforce strict exact domain allowlist (no wildcard subdomain bypasses)
   const hostname = targetUrl.hostname.toLowerCase();
-  const isAllowedDomain = ALLOWED_PROXY_DOMAINS.some(
-    (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
-  );
-  if (!isAllowedDomain) {
+  if (!ALLOWED_PROXY_DOMAINS.includes(hostname)) {
     return res.status(403).json({ error: 'Forbidden: Domain is not allowed for proxying.' });
   }
 
   // 3. Prevent DNS rebinding / Private IP access (check all resolved IPs)
-  try {
-    const lookupRecords = await dns.promises.lookup(hostname, { all: true });
-    for (const record of lookupRecords) {
-      if (isPrivateIp(record.address)) {
-        return res.status(403).json({ error: 'Forbidden: Access to private or internal addresses is prohibited.' });
-      }
-    }
-  } catch (_dnsError) {
-    return res.status(400).json({ error: 'Failed to resolve remote host' });
+  const dnsCheck = await validateDns(hostname);
+  if (!dnsCheck.safe) {
+    return res.status(403).json({ error: dnsCheck.error });
   }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     // 4. Fetch with timeout and strict redirect refusal (redirect: 'error')
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     let response: any;
     try {
       response = await fetch(targetUrl.toString(), {
@@ -288,8 +238,11 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
           'Accept': 'image/webp,image/avif,image/png,image/jpeg,image/*;q=0.8',
         },
       });
-    } finally {
-      clearTimeout(timeoutId);
+    } catch (fetchErr: any) {
+      if (fetchErr.name === 'AbortError') {
+        return res.status(504).json({ error: 'Remote image request timed out' });
+      }
+      return res.status(502).json({ error: 'Failed to connect to remote image host', message: fetchErr.message });
     }
 
     if (!response.ok) {
@@ -303,15 +256,20 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Remote URL did not return an allowed image content-type' });
     }
 
-    // 6. Response size validation (max 5MB)
+    // 6. Response streaming with strict 5MB cutoff (does not rely on Content-Length)
     const contentLength = response.headers.get('content-length');
     if (contentLength && parseInt(contentLength, 10) > MAX_PROXY_IMAGE_SIZE) {
       return res.status(413).json({ error: 'Image exceeds maximum allowable size of 5MB' });
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength > MAX_PROXY_IMAGE_SIZE) {
-      return res.status(413).json({ error: 'Image exceeds maximum allowable size of 5MB' });
+    let buffer: Buffer;
+    try {
+      buffer = await streamImageWithLimit(response.body, controller, MAX_PROXY_IMAGE_SIZE);
+    } catch (streamErr: any) {
+      if (streamErr instanceof PayloadTooLargeError || streamErr?.code === 'PAYLOAD_TOO_LARGE') {
+        return res.status(413).json({ error: 'Image exceeds maximum allowable size of 5MB' });
+      }
+      throw streamErr;
     }
 
     // 7. Safe cache and security headers
@@ -320,7 +278,6 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'public, max-age=86400');
 
-    const buffer = Buffer.from(arrayBuffer);
     res.send(buffer);
   } catch (error: any) {
     if (error.name === 'AbortError') {
@@ -328,6 +285,8 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
     }
     console.error('Image proxy error:', error);
     res.status(500).json({ error: 'Failed to proxy image', message: error.message });
+  } finally {
+    clearTimeout(timeoutId);
   }
 });
 
