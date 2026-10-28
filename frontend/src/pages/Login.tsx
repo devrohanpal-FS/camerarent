@@ -67,7 +67,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="customer@gmail.com or admin@camerarent.com"
+              placeholder="you@example.com"
               className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-slate-800 transition"
               required
             />
@@ -101,22 +101,6 @@ export default function Login() {
           <Link to="/signup" className="text-brand-600 hover:text-brand-700 font-bold hover:underline">
             Register for free
           </Link>
-        </div>
-
-        <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 space-y-1">
-          <p className="font-bold text-xs text-slate-700">Demo Accounts Available:</p>
-          <div className="flex justify-between">
-            <span>Customer: <strong className="text-slate-700">customer@gmail.com</strong></span>
-            <span>Pass: <strong className="text-slate-700">password123</strong></span>
-          </div>
-          <div className="flex justify-between">
-            <span>Super Admin: <strong className="text-slate-700">admin@camerarent.com</strong></span>
-            <span>Pass: <strong className="text-slate-700">password123</strong></span>
-          </div>
-          <div className="flex justify-between">
-            <span>Apex Vendor: <strong className="text-slate-700">apex@camerarent.com</strong></span>
-            <span>Pass: <strong className="text-slate-700">password123</strong></span>
-          </div>
         </div>
       </div>
     </div>
