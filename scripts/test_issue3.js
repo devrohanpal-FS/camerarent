@@ -74,7 +74,6 @@ async function run() {
 
   let allPassed = true;
 
-  // Login
   const loginRes = await post('/api/auth/login', {
     email: CUSTOMER_EMAIL,
     password: CUSTOMER_PASSWORD
@@ -82,10 +81,8 @@ async function run() {
   if (loginRes.status !== 200) throw new Error('Customer login failed');
   const token = loginRes.body.token;
 
-  // Clear existing cart for customer
   await prisma.cartItem.deleteMany({ where: { user: { email: CUSTOMER_EMAIL } } });
 
-  // Get test product with sufficient stock (>= 10)
   const prods = await get('/api/products', token);
   const product = prods.body.find(p => p.totalStock >= 12) || prods.body[0];
   console.log(`Using product: "${product.name}" (Stock: ${product.totalStock})\n`);
@@ -95,9 +92,6 @@ async function run() {
   const validEnd = new Date(validStart);
   validEnd.setDate(validStart.getDate() + 2);
 
-  // --------------------------------------------------------------------------
-  // TEST 1: Bad Quantity Values (All must return 400 Bad Request)
-  // --------------------------------------------------------------------------
   console.log('--- Test 1: Invalid Quantity Values (Must all be 400) ---');
   const badQuantities = [
     { val: -3, label: 'Negative integer (-3)' },
@@ -135,9 +129,6 @@ async function run() {
     }
   }
 
-  // --------------------------------------------------------------------------
-  // TEST 2: Valid Quantity (2)
-  // --------------------------------------------------------------------------
   console.log('\n--- Test 2: Valid Quantity (2) ---');
   const validRes = await post('/api/cart', {
     productId: product.id,
@@ -154,14 +145,9 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // TEST 3: Cart Merge Quantity Cap (Cannot exceed 10 combined)
-  // --------------------------------------------------------------------------
   console.log('\n--- Test 3: Cart Quantity Merge & 10 Cap Limit ---');
-  // Clear cart first
   await prisma.cartItem.deleteMany({ where: { user: { email: CUSTOMER_EMAIL } } });
 
-  // Add 6 units
   const add6 = await post('/api/cart', {
     productId: product.id,
     startDate: validStart.toISOString(),
@@ -170,7 +156,6 @@ async function run() {
   }, token);
   console.log('Add 6 units -> Status:', add6.status);
 
-  // Add 5 more units (6 + 5 = 11 > 10 cap) -> Must be rejected with 400
   const add5 = await post('/api/cart', {
     productId: product.id,
     startDate: validStart.toISOString(),
@@ -185,11 +170,7 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // TEST 4: Date Validations (end < start, past date, >30 days)
-  // --------------------------------------------------------------------------
   console.log('\n--- Test 4: Date Validation Checks ---');
-  // 4a. End before start
   const endBeforeStartRes = await post('/api/cart', {
     productId: product.id,
     startDate: validEnd.toISOString(),
@@ -204,7 +185,6 @@ async function run() {
     allPassed = false;
   }
 
-  // 4b. Past start date
   const pastRes = await post('/api/cart', {
     productId: product.id,
     startDate: '2020-01-01T00:00:00.000Z',
@@ -219,10 +199,9 @@ async function run() {
     allPassed = false;
   }
 
-  // 4c. Duration > 30 days
   const longStart = new Date(validStart);
   const longEnd = new Date(validStart);
-  longEnd.setDate(longStart.getDate() + 35); // 36 days
+  longEnd.setDate(longStart.getDate() + 35);
   const longRes = await post('/api/cart', {
     productId: product.id,
     startDate: longStart.toISOString(),
@@ -237,14 +216,9 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // TEST 5: Checkout Defense Against Corrupted / Negative Cart Rows
-  // --------------------------------------------------------------------------
   console.log('\n--- Test 5: Checkout Defense Against Bad Cart Invariants ---');
-  // Clear cart
   await prisma.cartItem.deleteMany({ where: { user: { email: CUSTOMER_EMAIL } } });
 
-  // Directly insert a corrupted cart item into DB (e.g. quantity = -5)
   const user = await prisma.user.findUnique({ where: { email: CUSTOMER_EMAIL } });
   await prisma.cartItem.create({
     data: {
@@ -252,11 +226,10 @@ async function run() {
       productId: product.id,
       startDate: validStart,
       endDate: validEnd,
-      quantity: -5 // Injected negative quantity
+      quantity: -5
     }
   });
 
-  // Attempt checkout
   const badCheckoutRes = await post('/api/orders/checkout', {
     deliveryAddress: '74 Gautam Nagar, New Delhi',
     paymentMethod: 'COD'
@@ -271,9 +244,6 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // CLEANUP: Reset customer cart
-  // --------------------------------------------------------------------------
   await prisma.cartItem.deleteMany({ where: { user: { email: CUSTOMER_EMAIL } } });
   await prisma.$disconnect();
 

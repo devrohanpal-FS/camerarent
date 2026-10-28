@@ -7,7 +7,6 @@ import { useSEO } from './utils/useSEO';
 import Footer from './components/Footer';
 import { Loader2 } from 'lucide-react';
 
-// Lazy loaded page components
 const Home = lazy(() => import('./pages/Home'));
 const Catalog = lazy(() => import('./pages/Catalog'));
 const ProductDetail = lazy(() => import('./pages/ProductDetail'));
@@ -23,7 +22,6 @@ const Faq = lazy(() => import('./pages/Faq'));
 const VendorOnboarding = lazy(() => import('./pages/VendorOnboarding'));
 const About = lazy(() => import('./pages/About'));
 
-// Simple loading indicator fallback for Suspense
 function PageLoader() {
   return (
     <div className="flex-1 flex items-center justify-center min-h-[50vh]">
@@ -32,7 +30,6 @@ function PageLoader() {
   );
 }
 
-// Protected Route for Customer / general authenticated users
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, token } = useAuthStore();
 
@@ -53,7 +50,6 @@ export default function App() {
 
   useSEO();
 
-  // Automatically refresh profile on app startup if token exists
   useEffect(() => {
     if (token) {
       refreshProfile();
@@ -67,30 +63,26 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen gradient-bg flex flex-col">
-        {/* Navigation Bar */}
         <Navbar />
 
-        {/* Main Content Area */}
         <main className="flex-1 pb-16">
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* Public Pages */}
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/products/:slug" element={<ProductDetail />} />
 
-              {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 
-              {/* Static Resource Pages */}
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/policies" element={<Policies />} />
+              <Route path="/terms" element={<Policies />} />
+              <Route path="/terms-and-conditions" element={<Policies />} />
               <Route path="/faq" element={<Faq />} />
               <Route path="/vendor-onboarding" element={<VendorOnboarding />} />
               <Route path="/about" element={<About />} />
 
-              {/* Protected Customer Routes */}
               <Route
                 path="/cart"
                 element={
@@ -116,7 +108,6 @@ export default function App() {
                 }
               />
 
-              {/* Protected Admin Routes */}
               <Route
                 path="/admin"
                 element={
@@ -126,13 +117,11 @@ export default function App() {
                 }
               />
 
-              {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </main>
 
-        {/* Global Footer */}
         <Footer />
       </div>
     </BrowserRouter>

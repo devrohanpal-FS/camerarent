@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db';
 
-// Extend Express Request type to include user
 declare global {
   namespace Express {
     interface Request {
@@ -9,7 +8,7 @@ declare global {
         id: string;
         email: string;
         name: string;
-        role: string; // "ADMIN", "CUSTOMER", "VENDOR"
+        role: string;
         kycStatus: string;
         kycDocUrl: string | null;
         phone: string | null;

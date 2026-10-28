@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ShoppingBag, ShieldAlert, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
+import { getProductImageUrl } from '../utils/api';
 
 export default function Cart() {
-  const { items, loading, rentalTotal, depositTotal, taxTotal, grandTotal, fetchCart, updateCartItem, removeCartItem, clearCart } = useCartStore();
+  const { items, loading, fetchCart, updateCartItem, removeCartItem, clearCart } = useCartStore();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -67,7 +68,6 @@ export default function Cart() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Side: Items List */}
         <div className="lg:col-span-8 space-y-4">
           {items.map((item) => (
             <div
@@ -76,7 +76,6 @@ export default function Cart() {
                 !item.isAvailable ? 'border-red-200 bg-red-50/30' : 'border-slate-100'
               }`}
             >
-              {/* Product Info */}
               <div className="flex gap-4 items-center flex-1">
                 <img
                   src={productImage(item.product.images)}
@@ -100,9 +99,7 @@ export default function Cart() {
                 </div>
               </div>
 
-              {/* Status & Quantity adjustments */}
               <div className="flex flex-row sm:flex-col justify-between items-center sm:items-end gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
-                {/* Quantity */}
                 <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 px-2.5 py-1.5 rounded-xl">
                   <button
                     onClick={() => handleQtyChange(item.id, item.quantity, -1)}
@@ -121,7 +118,6 @@ export default function Cart() {
 
               </div>
 
-              {/* Delete button */}
               <div className="flex sm:flex-col justify-between items-center gap-4 sm:pl-4 sm:border-l border-slate-100">
                 <button
                   onClick={() => removeCartItem(item.id)}
@@ -132,7 +128,6 @@ export default function Cart() {
                 </button>
               </div>
 
-              {/* Overlapping double-booking Alert Banner */}
               {!item.isAvailable && (
                 <div className="w-full sm:col-span-full bg-red-50 border border-red-100 px-4 py-2.5 rounded-xl flex items-center gap-2 text-[11px] text-red-500 mt-2 sm:mt-0 font-medium">
                   <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -145,7 +140,6 @@ export default function Cart() {
           ))}
         </div>
 
-        {/* Right Side: Totals Summary Card */}
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
             <h3 className="font-extrabold text-base text-slate-800">Order Summary</h3>
@@ -192,6 +186,5 @@ export default function Cart() {
 }
 
 function productImage(images: string): string {
-  if (!images) return '';
-  return images.split(',')[0];
+  return getProductImageUrl(images);
 }

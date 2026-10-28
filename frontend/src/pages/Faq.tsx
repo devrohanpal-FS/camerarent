@@ -40,7 +40,6 @@ export default function Faq() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 space-y-10 bg-slate-50">
       
-      {/* Header */}
       <div className="text-center max-w-xl mx-auto space-y-3">
         <span className="bg-brand-100 text-brand-700 text-xs font-bold px-3 py-1.5 rounded-full border border-brand-200 uppercase tracking-wider">
           Help Desk
@@ -53,7 +52,6 @@ export default function Faq() {
         </p>
       </div>
 
-      {/* FAQ Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
         {faqList.map((item: any, idx: number) => (
           <div key={idx} className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-3 hover:border-brand-300 transition duration-300">
@@ -68,7 +66,6 @@ export default function Faq() {
         ))}
       </div>
 
-      {/* CTA helper */}
       <div className="bg-slate-100/50 border border-slate-200/50 rounded-3xl p-6 text-center text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
         Still have questions or need assistance with a custom bulk rental package? Contact our dispatch crew at <a href={`mailto:${company.email}`} className="text-brand-600 hover:underline font-bold">{company.email}</a> or phone {company.phone}.
       </div>

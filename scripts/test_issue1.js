@@ -2,13 +2,11 @@ const http = require('http');
 const { PrismaClient } = require('../backend/node_modules/@prisma/client');
 const prisma = new PrismaClient();
 
-// Enforce that script only runs against localhost
 const TARGET_HOST = process.env.TEST_HOST || 'localhost';
 if (TARGET_HOST !== 'localhost' && TARGET_HOST !== '127.0.0.1') {
   throw new Error(`Safety check failed: Test script can only be run against localhost, got "${TARGET_HOST}"`);
 }
 
-// Strictly read credentials from environment (no hardcoded fallback defaults)
 const CUSTOMER_EMAIL = process.env.TEST_CUSTOMER_EMAIL;
 const CUSTOMER_PASSWORD = process.env.TEST_CUSTOMER_PASSWORD;
 const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
@@ -144,7 +142,6 @@ async function run() {
   console.log('🔐 SECURITY VERIFICATION TEST: ISSUE #1 (EXTENDED)');
   console.log('====================================================\n');
 
-  // 1. Authenticate users
   console.log('--- Step 1: Login Customer & Admin via Environment Credentials ---');
   const custLogin = await post('/api/auth/login', {
     email: CUSTOMER_EMAIL,
@@ -162,12 +159,10 @@ async function run() {
   const adminToken = adminLogin.body.token;
   console.log('✅ Admin logged in successfully (Role:', adminLogin.body.user.role, ')');
 
-  // 2. Fetch product for testing
   const prodsRes = await get('/api/products', customerToken);
   const product = prodsRes.body[0];
   console.log(`\nUsing test product: "${product.name}" (Daily Rate: ₹${product.dailyRate}, Deposit: ₹${product.depositAmount})`);
 
-  // Helper to add item to cart
   async function addToCartWithOffset(offsetDays) {
     const start = new Date();
     start.setDate(start.getDate() + offsetDays);
@@ -182,7 +177,6 @@ async function run() {
     return res.status;
   }
 
-  // TEST 2: Price and Payment Tampering during checkout
   console.log('\n--- Step 2: Checkout with Tampered paymentStatus & Tampered Price ---');
   await addToCartWithOffset(100);
 
@@ -190,11 +184,11 @@ async function run() {
     deliveryAddress: '74 Gautam Nagar, New Delhi',
     deliveryDetails: 'Tamper verification test',
     paymentMethod: 'COD',
-    paymentStatus: 'PAID',       // TAMPER ATTEMPT: Trying to mark as PAID
-    grandTotal: 1.00,            // TAMPER ATTEMPT: Trying to pay ₹1.00
-    totalRentalCost: 1.00,       // TAMPER ATTEMPT: Fake rental cost
-    totalDeposit: 0.00,          // TAMPER ATTEMPT: Zero deposit
-    dailyRate: 0.50              // TAMPER ATTEMPT: Fake daily rate
+    paymentStatus: 'PAID',
+    grandTotal: 1.00,
+    totalRentalCost: 1.00,
+    totalDeposit: 0.00,
+    dailyRate: 0.50
   };
 
   const checkoutRes = await post('/api/orders/checkout', tamperedPayload, customerToken);
@@ -217,11 +211,9 @@ async function run() {
     console.log('✅ PASS: Server strictly ignored client paymentStatus and recomputed all totals from DB prices!');
   }
 
-  // TEST 3: Duplicate UTR Sequential Check
   console.log('\n--- Step 3a: Duplicate UTR Reuse Prevention Test (Sequential) ---');
   const testUtr = '987654321098';
 
-  // Order with UTR
   await addToCartWithOffset(120);
   const utrOrder1Res = await post('/api/orders/checkout', {
     deliveryAddress: '74 Gautam Nagar, New Delhi',
@@ -235,7 +227,6 @@ async function run() {
     console.log(`Order 1 with UTR ${testUtr} created: Status = ${utrOrder1.paymentStatus}`);
   }
 
-  // Second order trying to reuse the SAME UTR
   await addToCartWithOffset(140);
   const duplicateUtrRes = await post('/api/orders/checkout', {
     deliveryAddress: '74 Gautam Nagar, New Delhi',
@@ -251,7 +242,6 @@ async function run() {
     console.error('🚨 FAIL: Duplicate UTR was not blocked properly!');
   }
 
-  // TEST 3b: Parallel Race Condition Test (Promise.all with Same UTR)
   console.log('\n--- Step 3b: Parallel Race Condition Test (Promise.all with Same UTR) ---');
   const parallelUtr = '112233445566';
   await addToCartWithOffset(160);
@@ -282,18 +272,14 @@ async function run() {
     console.error('🚨 FAIL: Parallel UTR race condition was not handled atomically! Statuses:', statuses);
   }
 
-  // TEST 4: PATCH /api/orders/:id/payment Access Control & Validation
   console.log('\n--- Step 4: PATCH /api/orders/:id/payment Tests ---');
 
-  // 4a. No token -> 401
   const noTokenRes = await patch(`/api/orders/${order1.id}/payment`, { paymentStatus: 'PAID' });
   console.log('4a. No Token request -> Status:', noTokenRes.status, noTokenRes.status === 401 ? '✅ (PASS: 401 Unauthorized)' : '🚨 FAIL');
 
-  // 4b. Customer token -> 403
   const customerPatchRes = await patch(`/api/orders/${order1.id}/payment`, { paymentStatus: 'PAID' }, customerToken);
   console.log('4b. Customer Token request -> Status:', customerPatchRes.status, customerPatchRes.status === 403 ? '✅ (PASS: 403 Forbidden)' : '🚨 FAIL');
 
-  // 4c. Admin token with invalid status -> 400
   const invalidStatusRes = await patch(`/api/orders/${order1.id}/payment`, { paymentStatus: 'SUPER_PAID' }, adminToken);
   console.log('4c. Admin with Invalid Status -> Status:', invalidStatusRes.status);
   console.log('Error message:', invalidStatusRes.body?.error);
@@ -303,9 +289,7 @@ async function run() {
     console.error('🚨 FAIL: Did not return expected 400 error message');
   }
 
-  // 4d. Cancelled order cannot be marked as PAID
   console.log('\n--- Step 4d: Cancelled Order Payment Guard ---');
-  // Update order1 to CANCELLED status using Admin endpoint
   const cancelStatusRes = await put(`/api/orders/${order1.id}/status`, { status: 'CANCELLED' }, adminToken);
   console.log('Order status updated to CANCELLED -> Status:', cancelStatusRes.status);
   const cancelPatchRes = await patch(`/api/orders/${order1.id}/payment`, { paymentStatus: 'PAID' }, adminToken);
@@ -316,7 +300,6 @@ async function run() {
     console.error('🚨 FAIL: Cancelled order was not blocked from being marked as PAID!');
   }
 
-  // 4e. Admin token with valid status PAID on active order -> 200
   if (utrOrder1) {
     const adminPatchRes = await patch(`/api/orders/${utrOrder1.id}/payment`, { paymentStatus: 'PAID' }, adminToken);
     console.log('\n4e. Admin marking active order as PAID -> Status:', adminPatchRes.status);
@@ -328,7 +311,6 @@ async function run() {
     }
   }
 
-  // CLEANUP: Clean up test orders from dev database (ONLY createdOrderIds for this run)
   console.log('\n--- Step 5: Database Cleanup (Only Current Run Orders) ---');
   if (createdOrderIds.length > 0) {
     const deleteItems = await prisma.orderItem.deleteMany({
@@ -340,7 +322,6 @@ async function run() {
     console.log(`🧹 Cleaned up ${deleteOrders.count} test orders and ${deleteItems.count} test items created during this run.`);
   }
 
-  // Also clear customer's cart so state is clean
   await prisma.cartItem.deleteMany({
     where: { user: { email: CUSTOMER_EMAIL } }
   });

@@ -24,28 +24,25 @@ export default function Signup() {
     try {
       await signup(name, email, password);
       navigate('/');
-    } catch (err: any) {
-      // Handled by store
+    } catch {
     }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 gradient-bg">
-      <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-        {/* Header */}
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-8 gradient-bg">
+      <div className="w-full max-w-md bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-100">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 mx-auto mb-4">
             <Camera className="w-6 h-6 text-white" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-800 font-sans">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 font-sans">
             Create an Account
           </h2>
-          <p className="text-sm text-slate-400 mt-2">
+          <p className="text-xs sm:text-sm text-slate-500 mt-2">
             Register to rent high-end production equipment
           </p>
         </div>
 
-        {/* Errors */}
         {(localError || error) && (
           <div className="mb-6 bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-start gap-3 text-sm text-red-400">
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -53,7 +50,6 @@ export default function Signup() {
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-semibold text-dark-muted uppercase tracking-wider mb-2">
@@ -106,7 +102,6 @@ export default function Signup() {
           </button>
         </form>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-xs text-slate-400">
           Already have an account?{' '}
           <Link to="/login" className="text-brand-600 hover:text-brand-700 font-bold hover:underline">

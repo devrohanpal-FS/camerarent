@@ -15,7 +15,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
   const [showCalendar, setShowCalendar] = useState(false);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
 
-  // Fetch blocked dates whenever productId changes
   useEffect(() => {
     async function loadBlockedDates() {
       try {
@@ -31,7 +30,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
 
-  // Helper to format date string to YYYY-MM-DD
   const formatDateStr = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,7 +40,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
   const isDateUnavailable = (date: Date) => {
     const formatted = formatDateStr(date);
     
-    // Past dates are always unavailable
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (date < today) return true;
@@ -54,20 +51,17 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
     if (isDateUnavailable(date)) return;
 
     if (!startDate || (startDate && endDate)) {
-      // First click: set start date, reset end date
       onChange(date, null);
     } else if (startDate && !endDate) {
       if (date < startDate) {
-        // If clicked date is before start date, treat it as new start date
         onChange(date, null);
       } else {
-        // Second click: set end date, check if range contains unavailable dates
         if (hasBlockedDatesInRange(startDate, date)) {
           alert('Selected range overlaps with unavailable/booked dates. Please choose another range.');
           onChange(null, null);
         } else {
           onChange(startDate, date);
-          setShowCalendar(false); // Close calendar on successful selection
+          setShowCalendar(false);
         }
       }
     }
@@ -109,18 +103,15 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
     return false;
   };
 
-  // Calendar rendering math
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const calendarDays: Date[] = [];
 
-  // Fill in empty slots from previous month
   for (let i = 0; i < firstDayOfMonth; i++) {
     const prevDate = new Date(year, month, -firstDayOfMonth + i + 1);
     calendarDays.push(prevDate);
   }
 
-  // Fill in active month days
   for (let i = 1; i <= daysInMonth; i++) {
     calendarDays.push(new Date(year, month, i));
   }
@@ -144,7 +135,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
         Rental Period
       </label>
 
-      {/* Input button triggering popup */}
       <button
         type="button"
         onClick={() => setShowCalendar(!showCalendar)}
@@ -164,32 +154,29 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
         <span className="text-xs text-brand-400 hover:underline">Change</span>
       </button>
 
-      {/* Popover Calendar */}
       {showCalendar && (
-        <div className="absolute left-0 right-0 mt-2 z-50 p-4 rounded-2xl glass-panel shadow-2xl border border-slate-100">
-          {/* Header navigation */}
+        <div className="absolute left-0 right-0 mt-2 z-50 p-4 rounded-2xl bg-white/95 backdrop-blur-xl shadow-2xl border border-slate-200/90 max-w-full">
           <div className="flex items-center justify-between mb-4">
             <button
               type="button"
               onClick={prevMonth}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition"
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <h3 className="font-semibold text-sm text-gray-100">
+            <h3 className="font-extrabold text-sm text-slate-900">
               {monthNames[month]} {year}
             </h3>
             <button
               type="button"
               onClick={nextMonth}
-              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition cursor-pointer"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Weekday labels */}
-          <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-500 mb-2">
+          <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
             <div>Su</div>
             <div>Mo</div>
             <div>Tu</div>
@@ -199,7 +186,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
             <div>Sa</div>
           </div>
 
-          {/* Days grid */}
           <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((date, idx) => {
               const isCurrentMonthDay = date.getMonth() === month;
@@ -210,15 +196,15 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
               let dayClass = "h-8 w-8 text-xs flex items-center justify-center rounded-lg transition-all mx-auto cursor-pointer ";
               
               if (!isCurrentMonthDay) {
-                dayClass += "text-slate-700 pointer-events-none ";
+                dayClass += "text-slate-300 pointer-events-none ";
               } else if (isUnavailable) {
-                dayClass += "text-slate-600 line-through bg-slate-900/50 cursor-not-allowed ";
+                dayClass += "text-slate-400 line-through bg-slate-100/80 cursor-not-allowed ";
               } else if (isSelected) {
-                dayClass += "bg-brand-600 text-white font-bold scale-110 shadow-lg shadow-brand-500/20 ";
+                dayClass += "bg-[#2a1872] text-white font-bold scale-105 shadow-md shadow-[#2a1872]/20 ";
               } else if (inRange) {
-                dayClass += "bg-brand-500/20 text-brand-300 rounded-md ";
+                dayClass += "bg-purple-100 text-[#2a1872] font-bold rounded-md ";
               } else {
-                dayClass += "text-slate-300 hover:bg-slate-800 ";
+                dayClass += "text-slate-700 hover:bg-[#2a1872]/10 hover:text-[#2a1872] font-semibold ";
               }
 
               return (
@@ -236,7 +222,6 @@ export default function DateRangePicker({ productId, startDate, endDate, onChang
             })}
           </div>
 
-          {/* Selected dates status */}
           <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
             <span className="text-slate-500">
               {startDate && `From: ${startDate.toLocaleDateString()}`}

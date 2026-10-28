@@ -8,12 +8,10 @@ export function useSEO() {
     const seo = contents.seo_metadata;
     if (!seo) return;
 
-    // Update document title
     if (seo.metaTitle) {
       document.title = seo.metaTitle;
     }
 
-    // Helper function to update or create meta tag
     const updateMetaTag = (selector: string, attribute: string, value: string) => {
       let element = document.querySelector(selector);
       if (!element) {

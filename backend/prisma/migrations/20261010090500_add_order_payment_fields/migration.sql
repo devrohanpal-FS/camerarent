@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN "paymentMethod" TEXT NOT NULL DEFAULT 'COD';
+ALTER TABLE "Order" ADD COLUMN "paymentStatus" TEXT NOT NULL DEFAULT 'PENDING';
+ALTER TABLE "Order" ADD COLUMN "utrNumber" TEXT;
+ALTER TABLE "Order" ADD COLUMN "paymentProofUrl" TEXT;

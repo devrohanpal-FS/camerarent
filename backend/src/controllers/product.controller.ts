@@ -16,7 +16,6 @@ import {
 
 const router = Router();
 
-// Upload one or more product images (accepts base64 dataUrls and stores files in /uploads/products)
 router.post(
   '/upload-images',
   authMiddleware,
@@ -46,7 +45,6 @@ router.post(
 
         const match = item.dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
         if (!match) {
-          // If it's already a regular URL, keep it
           if (item.dataUrl.startsWith('http') || item.dataUrl.startsWith('/uploads')) {
             uploadedUrls.push(item.dataUrl);
           }
@@ -81,7 +79,6 @@ router.post(
   }
 );
 
-// Get all categories
 router.get('/categories', async (req: Request, res: Response) => {
   try {
     const categories = await prisma.category.findMany({
@@ -94,31 +91,26 @@ router.get('/categories', async (req: Request, res: Response) => {
   }
 });
 
-// List all products with filters
 router.get('/', async (req: Request, res: Response) => {
   const { category, subcategory, vendorId, search, startDate, endDate } = req.query;
 
   try {
     const whereClause: any = {};
 
-    // 1. Category Filter
     if (category) {
       whereClause.category = {
         slug: category as string,
       };
     }
 
-    // Subcategory Filter
     if (subcategory) {
       whereClause.subcategory = subcategory as string;
     }
 
-    // 2. Vendor Filter
     if (vendorId) {
       whereClause.vendorId = vendorId as string;
     }
 
-    // 3. Search Filter (name/description)
     if (search) {
       whereClause.OR = [
         { name: { contains: search as string } },
@@ -126,7 +118,6 @@ router.get('/', async (req: Request, res: Response) => {
       ];
     }
 
-    // 4. Date Availability Filter
     if (startDate && endDate) {
       const start = new Date(startDate as string);
       start.setHours(0, 0, 0, 0);
@@ -134,7 +125,6 @@ router.get('/', async (req: Request, res: Response) => {
       end.setHours(23, 59, 59, 999);
 
       if (start <= end) {
-        // Find product IDs that have overlapping blackouts
         const blackoutProducts = await prisma.productAvailabilityBlackout.findMany({
           where: {
             NOT: [
@@ -145,7 +135,6 @@ router.get('/', async (req: Request, res: Response) => {
           select: { productId: true },
         });
 
-        // Find product IDs that have overlapping active bookings
         const bookedProducts = await prisma.orderItem.findMany({
           where: {
             order: {
@@ -159,7 +148,6 @@ router.get('/', async (req: Request, res: Response) => {
           select: { productId: true },
         });
 
-        // Combine excluded IDs
         const excludedProductIds = Array.from(
           new Set([
             ...blackoutProducts.map((bp) => bp.productId),
@@ -191,7 +179,6 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Proxy remote images to avoid browser hotlinking blocks (Protected against SSRF)
 router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response) => {
   const { url } = req.query;
 
@@ -206,18 +193,15 @@ router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response
     return res.status(400).json({ error: 'Invalid URL format' });
   }
 
-  // 1. Enforce HTTPS only (no HTTP allowed since no DB products use HTTP)
   if (targetUrl.protocol !== 'https:') {
     return res.status(400).json({ error: 'Invalid URL protocol. Only HTTPS is permitted.' });
   }
 
-  // 2. Enforce strict exact domain allowlist (no wildcard subdomain bypasses)
   const hostname = targetUrl.hostname.toLowerCase();
   if (!ALLOWED_PROXY_DOMAINS.includes(hostname)) {
     return res.status(403).json({ error: 'Forbidden: Domain is not allowed for proxying.' });
   }
 
-  // 3. Prevent DNS rebinding / Private IP access (check all resolved IPs)
   const dnsCheck = await validateDns(hostname);
   if (!dnsCheck.safe) {
     return res.status(403).json({ error: dnsCheck.error });
@@ -227,7 +211,6 @@ router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response
   const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
-    // 4. Fetch with timeout and strict redirect refusal (redirect: 'error')
     let response: any;
     try {
       response = await fetch(targetUrl.toString(), {
@@ -249,14 +232,12 @@ router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response
       return res.status(response.status).json({ error: 'Failed to fetch remote image' });
     }
 
-    // 5. Content-Type validation (prevent non-image MIME types and SVG XSS)
     const rawContentType = response.headers.get('content-type') || '';
     const contentType = rawContentType.split(';')[0].trim().toLowerCase();
     if (!ALLOWED_IMAGE_MIME_TYPES.includes(contentType)) {
       return res.status(400).json({ error: 'Remote URL did not return an allowed image content-type' });
     }
 
-    // 6. Response streaming with strict 5MB cutoff (does not rely on Content-Length)
     const contentLength = response.headers.get('content-length');
     if (contentLength && parseInt(contentLength, 10) > MAX_PROXY_IMAGE_SIZE) {
       return res.status(413).json({ error: 'Image exceeds maximum allowable size of 5MB' });
@@ -272,7 +253,6 @@ router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response
       throw streamErr;
     }
 
-    // 7. Safe cache and security headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -290,7 +270,6 @@ router.get('/proxy-image', imageProxyLimiter, async (req: Request, res: Response
   }
 });
 
-// Get a single product details
 router.get('/:idOrSlug', async (req: Request, res: Response) => {
   const { idOrSlug } = req.params;
 
@@ -319,7 +298,6 @@ router.get('/:idOrSlug', async (req: Request, res: Response) => {
   }
 });
 
-// Get unavailable dates (calendar support)
 router.get('/:id/unavailable-dates', async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -332,7 +310,6 @@ router.get('/:id/unavailable-dates', async (req: Request, res: Response) => {
   }
 });
 
-// Get range-based stock availability details
 router.get('/:id/stock-availability', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { startDate, endDate } = req.query;
@@ -366,7 +343,6 @@ router.get('/:id/stock-availability', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Start date must be before end date' });
     }
 
-    // Find all overlapping active bookings
     const bookings = await prisma.orderItem.findMany({
       where: {
         productId: id,
@@ -378,7 +354,6 @@ router.get('/:id/stock-availability', async (req: Request, res: Response) => {
       },
     });
 
-    // Check blackout
     const overlappingBlackout = await prisma.productAvailabilityBlackout.findFirst({
       where: {
         productId: id,
@@ -396,7 +371,6 @@ router.get('/:id/stock-availability', async (req: Request, res: Response) => {
       });
     }
 
-    // Find max booked units on any day in the range
     let maxBookedQty = 0;
     const day = new Date(start);
     while (day <= end) {
@@ -429,7 +403,6 @@ router.get('/:id/stock-availability', async (req: Request, res: Response) => {
   }
 });
 
-// Admin/Vendor Add Product
 router.post(
   '/',
   authMiddleware,
@@ -442,7 +415,6 @@ router.post(
     }
 
     try {
-      // Determine which vendor owns the product
       let actualVendorId = vendorId;
 
       if (req.user!.role === 'VENDOR') {
@@ -481,7 +453,6 @@ router.post(
   }
 );
 
-// Admin/Vendor Update Product
 router.put(
   '/:id',
   authMiddleware,
@@ -496,7 +467,6 @@ router.put(
         return res.status(404).json({ error: 'Product not found' });
       }
 
-      // Check ownership
       if (req.user!.role === 'VENDOR' && existingProduct.vendorId !== req.user!.vendorProfile?.id) {
         return res.status(403).json({ error: 'Forbidden. You do not own this product.' });
       }
@@ -528,7 +498,6 @@ router.put(
   }
 );
 
-// Admin/Vendor Delete Product
 router.delete(
   '/:id',
   authMiddleware,
@@ -542,7 +511,6 @@ router.delete(
         return res.status(404).json({ error: 'Product not found' });
       }
 
-      // Check ownership
       if (req.user!.role === 'VENDOR' && existingProduct.vendorId !== req.user!.vendorProfile?.id) {
         return res.status(403).json({ error: 'Forbidden. You do not own this product.' });
       }
@@ -556,7 +524,6 @@ router.delete(
   }
 );
 
-// Add Blackout Dates
 router.post(
   '/:id/blackouts',
   authMiddleware,
@@ -582,7 +549,6 @@ router.post(
       const start = new Date(startDate);
       const end = new Date(endDate);
 
-      // Verify availability before blacking out (optional, but good to avoid conflict with active rentals)
       const isFree = await checkProductAvailability(id, start, end);
       if (!isFree.available && isFree.reason?.includes('rented')) {
         return res.status(400).json({ error: `Cannot blackout dates: Product is currently rented during this period.` });
@@ -605,7 +571,6 @@ router.post(
   }
 );
 
-// Get Blackout Dates
 router.get('/:id/blackouts', async (req: Request, res: Response) => {
   const { id } = req.params;
 

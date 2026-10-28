@@ -38,7 +38,6 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   markAsRead: async (id: string) => {
     try {
       await apiRequest(`/notifications/${id}/read`, { method: 'PUT' });
-      // Update local state
       set({
         notifications: get().notifications.map((n) =>
           n.id === id ? { ...n, read: true } : n
@@ -52,7 +51,6 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   markAllRead: async () => {
     try {
       await apiRequest('/notifications/read-all', { method: 'PUT' });
-      // Update local state
       set({
         notifications: get().notifications.map((n) => ({ ...n, read: true }))
       });

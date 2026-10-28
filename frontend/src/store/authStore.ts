@@ -29,7 +29,6 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
-  // Initialize state from local storage if present
   const storedToken = localStorage.getItem('cinerent_token');
   const storedUser = localStorage.getItem('cinerent_user');
 
@@ -114,7 +113,6 @@ export const useAuthStore = create<AuthState>((set, get) => {
         set({ user: data.user });
       } catch (err) {
         console.error('Failed to refresh user profile:', err);
-        // If profile fetch fails, token is likely expired or invalid
         get().logout();
       }
     },

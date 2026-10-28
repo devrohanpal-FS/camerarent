@@ -4,7 +4,6 @@ import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// GET all notifications for current user
 router.get('/', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
@@ -18,7 +17,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response, next: NextFu
   }
 });
 
-// PUT mark all notifications as read
 router.put('/read-all', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
@@ -32,7 +30,6 @@ router.put('/read-all', authMiddleware, async (req: Request, res: Response, next
   }
 });
 
-// PUT mark single notification as read
 router.put('/:id/read', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;

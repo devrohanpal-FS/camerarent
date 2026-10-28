@@ -10,7 +10,7 @@ export interface CmsState {
   uploadImage: (name: string, type: string, base64: string) => Promise<string>;
 }
 
-export const useCmsStore = create<CmsState>((set, get) => ({
+export const useCmsStore = create<CmsState>((set) => ({
   contents: {},
   loading: false,
   error: null,

@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, LogOut, Camera, Grid, BarChart2, ChevronDown, PhoneCall, Menu, X, Bell } from 'lucide-react';
+import { ShoppingCart, User, LogOut, BarChart2, Menu, X, Bell } from 'lucide-react';
+import FlipLogo from './FlipLogo';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
-import { useCmsStore } from '../store/cmsStore';
 import { useNotificationStore } from '../store/notificationStore';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const { items, fetchCart } = useCartStore();
-  const { contents } = useCmsStore();
   const navigate = useNavigate();
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { notifications, fetchNotifications, markAsRead, markAllRead } = useNotificationStore();
@@ -24,7 +22,6 @@ export default function Navbar() {
     { label: 'Contact', path: '/contact' }
   ];
 
-  // Load cart count & notifications on mount / user change
   useEffect(() => {
     if (user) {
       fetchCart();
@@ -43,18 +40,10 @@ export default function Navbar() {
   const totalCartCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <nav className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 md:px-6 py-4 flex items-center justify-between shadow-sm">
-      {/* Brand Logo */}
-      <Link to="/" className="flex items-center gap-2 group shrink-0">
-        <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-500 flex items-center justify-center shadow-md shadow-brand-500/20 group-hover:scale-105 transition-all">
-          <Camera className="w-5 h-5 text-white" />
-        </div>
-        <span className="font-sans font-extrabold text-lg md:text-xl tracking-tight text-slate-800">
-          Camera<span className="text-brand-600">Rent</span>
-        </span>
-      </Link>
+    <nav className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
+        <FlipLogo />
 
-      {/* Desktop Nav Links */}
       <div className="hidden lg:flex items-center gap-6">
         {navMenu.map((item: any, idx: number) => (
           <Link
@@ -81,15 +70,13 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* Action Buttons & Hamburger */}
       <div className="flex items-center gap-3">
         {user ? (
           <>
-            {/* Notifications Button */}
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="relative p-2 rounded-xl hover:bg-slate-50 text-slate-650 hover:text-brand-600 transition-all cursor-pointer"
+                className="relative p-2 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-brand-600 transition-all cursor-pointer"
                 title="Notifications"
               >
                 <Bell className="w-5 h-5" />
@@ -101,13 +88,13 @@ export default function Navbar() {
               </button>
 
               {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-100 rounded-2xl shadow-xl p-3.5 z-[999] text-xs">
+                <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white border border-slate-100 rounded-2xl shadow-xl p-3.5 z-[999] text-xs">
                   <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 mb-2">
                     <span className="font-extrabold text-slate-800">Notifications</span>
                     {unreadNotificationsCount > 0 && (
                       <button
                         onClick={() => markAllRead()}
-                        className="text-[10px] text-brand-650 hover:underline font-bold cursor-pointer"
+                        className="text-[10px] text-brand-600 hover:underline font-bold cursor-pointer"
                       >
                         Mark all read
                       </button>
@@ -148,7 +135,6 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Cart Button */}
             {user.role !== 'VENDOR' && (
               <Link to="/cart" className="relative p-2 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-brand-600 transition-all">
                 <ShoppingCart className="w-5 h-5" />
@@ -160,7 +146,6 @@ export default function Navbar() {
               </Link>
             )}
 
-            {/* Profile Info - Desktop */}
             <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-100">
               <div className="text-right">
                 <p className="text-xs font-bold text-slate-800">{user.name}</p>
@@ -192,7 +177,6 @@ export default function Navbar() {
           </div>
         )}
 
-        {/* Mobile Menu Hamburger Button */}
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="p-2 rounded-xl hover:bg-slate-50 text-slate-600 lg:hidden focus:outline-none transition cursor-pointer"
@@ -200,11 +184,10 @@ export default function Navbar() {
           {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
+      </div>
 
-      {/* Mobile Drawer Overlay */}
       {mobileMenuOpen && (
         <div className="absolute top-full left-0 right-0 bg-white border-b border-slate-100 shadow-xl z-50 p-6 flex flex-col gap-6 lg:hidden animate-fade-in">
-          {/* Main Links */}
           <div className="flex flex-col gap-4">
             {navMenu.map((item: any, idx: number) => (
               <Link
@@ -238,7 +221,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Auth links / Profile mobile */}
           <div className="pt-6 border-t border-slate-100 flex flex-col gap-3">
             {user ? (
               <div className="flex items-center justify-between">

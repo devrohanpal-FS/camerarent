@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../db';
 import { authMiddleware, requireRole } from '../middleware/auth.middleware';
 import bcrypt from 'bcryptjs';
@@ -9,8 +11,8 @@ import { createNotification, notifyAdmins } from '../utils/notification';
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secure-camerarent-secret-key-2026';
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: 'Too many authentication attempts, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -18,7 +20,6 @@ const authLimiter = rateLimit({
 
 const router = Router();
 
-// Login
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -46,7 +47,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     } else {
       isMatch = user.password === password;
       if (isMatch) {
-        // Upgrade legacy plain-text password to hashed password automatically
         const hashedPassword = await bcrypt.hash(password, 10);
         await prisma.user.update({
           where: { id: user.id },
@@ -59,7 +59,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Sign JWT
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
@@ -89,7 +88,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Signup
 router.post('/signup', authLimiter, async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
 
@@ -140,12 +138,10 @@ router.post('/signup', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Get current user profile
 router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   res.json({ user: req.user });
 });
 
-// Update profile details (Name, Email, Phone, Password)
 router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
   const { name, email, phone, password } = req.body;
 
@@ -185,25 +181,60 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// Update KYC document link (Customer self-serve)
 router.put('/kyc', authMiddleware, async (req: Request, res: Response) => {
   const { kycDocUrl } = req.body;
 
-  if (!kycDocUrl) {
-    return res.status(400).json({ error: 'KYC Document URL is required' });
+  if (!kycDocUrl || typeof kycDocUrl !== 'string') {
+    return res.status(400).json({ error: 'KYC Document is required' });
   }
 
   try {
+    let finalDocUrl = kycDocUrl;
+
+    if (kycDocUrl.startsWith('data:')) {
+      const match = kycDocUrl.match(/^data:([a-zA-Z0-9+/.-]+);base64,(.+)$/);
+      if (match) {
+        const mime = match[1].toLowerCase();
+        const base64Data = match[2];
+        let ext = 'jpg';
+        if (mime.includes('png')) ext = 'png';
+        else if (mime.includes('webp')) ext = 'webp';
+        else if (mime.includes('pdf')) ext = 'pdf';
+        else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+
+        const uploadDir = path.join(__dirname, '../../uploads/kyc');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const safeUserId = req.user!.id.replace(/[^a-zA-Z0-9-]/g, '');
+        const filename = `kyc-${safeUserId}-${Date.now()}.${ext}`;
+        const filePath = path.join(uploadDir, filename);
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+        finalDocUrl = `/uploads/kyc/${filename}`;
+      }
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: req.user!.id },
       data: {
-        kycDocUrl,
+        kycDocUrl: finalDocUrl,
         kycStatus: 'PENDING',
       },
     });
 
-    await createNotification(req.user!.id, 'KYC Uploaded', 'Your KYC documents have been successfully submitted and are pending administrative review.', 'KYC_STATUS');
-    await notifyAdmins('New KYC Submission', `User ${req.user!.name} has uploaded their KYC document for review.`, 'KYC_STATUS');
+    await createNotification(
+      req.user!.id,
+      'KYC Uploaded',
+      'Your KYC documents have been successfully submitted and are pending administrative review.',
+      'KYC_STATUS'
+    );
+    await notifyAdmins(
+      'New KYC Submission',
+      `User ${req.user!.name} has uploaded their KYC document for review.`,
+      'KYC_STATUS'
+    );
 
     res.json({
       message: 'KYC documents submitted. Pending administrative review.',
@@ -216,7 +247,6 @@ router.put('/kyc', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// Get all users with pending KYC reviews (Admin)
 router.get('/admin/kyc-pending', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
@@ -237,10 +267,9 @@ router.get('/admin/kyc-pending', authMiddleware, requireRole(['ADMIN']), async (
   }
 });
 
-// Update KYC status for a user (Admin)
 router.put('/admin/kyc/:userId', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const { status } = req.body; // APPROVED or REJECTED
+  const { status } = req.body;
 
   if (!status || !['NONE', 'PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
     return res.status(400).json({ error: 'Status must be NONE, PENDING, APPROVED or REJECTED' });
@@ -266,7 +295,6 @@ router.put('/admin/kyc/:userId', authMiddleware, requireRole(['ADMIN']), async (
   }
 });
 
-// Get all users (Admin only)
 router.get('/admin/users', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
@@ -289,7 +317,6 @@ router.get('/admin/users', authMiddleware, requireRole(['ADMIN']), async (req: R
   }
 });
 
-// Create a new user (Admin only)
 router.post('/admin/users', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response) => {
   const { name, email, password, phone, role } = req.body;
 
@@ -332,7 +359,6 @@ router.post('/admin/users', authMiddleware, requireRole(['ADMIN']), async (req: 
   }
 });
 
-// Delete a user (Admin only)
 router.delete('/admin/users/:id', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response) => {
   const { id } = req.params;
 

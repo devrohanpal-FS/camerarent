@@ -13,13 +13,13 @@ model User {
   password             String
   name                 String
   phone                String?
-  role                 String                 // "ADMIN", "CUSTOMER", "VENDOR"
-  kycStatus            String                 @default("NONE") // "NONE", "PENDING", "APPROVED", "REJECTED"
+  role                 String
+  kycStatus            String                 @default("NONE")
   kycDocUrl            String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   
-  // Relations
+
   vendorProfile        Vendor?
   cartItems            CartItem[]
   orders               Order[]
@@ -31,7 +31,7 @@ model Vendor {
   name           String
   email          String    @unique
   phone          String?
-  commissionRate Float     @default(15.0) // percentage
+  commissionRate Float     @default(15.0)
   isActive       Boolean   @default(true)
   userId         String    @unique
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -55,11 +55,11 @@ model Product {
   name          String
   slug          String
   description   String
-  specs         String    // JSON string or long text
+  specs         String
   dailyRate     Float
   weeklyRate    Float
   depositAmount Float
-  images        String    // Comma-separated list of image URLs or JSON string
+  images        String
   vendorId      String
   vendor        Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   categoryId    String
@@ -69,7 +69,6 @@ model Product {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // Relations
   blackouts     ProductAvailabilityBlackout[]
   cartItems     CartItem[]
   orderItems    OrderItem[]
@@ -101,10 +100,10 @@ model CartItem {
 
 model Order {
   id               String               @id @default(uuid())
-  orderNumber      String               @unique // E.g., CR-2026-XXXX
+  orderNumber      String               @unique
   userId           String
   user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status           String               @default("PLACED") // "PLACED", "PENDING_APPROVAL", "APPROVED", "DISPATCHED", "ACTIVE", "RETURNED", "COMPLETED", "CANCELLED"
+  status           String               @default("PLACED")
   totalRentalCost  Float
   totalDeposit     Float
   totalTax         Float
@@ -112,11 +111,14 @@ model Order {
   deliveryAddress  String
   deliveryDetails  String?
   paymentId        String?
+  paymentMethod    String               @default("COD")
+  paymentStatus    String               @default("PENDING")
+  utrNumber        String?
+  paymentProofUrl  String?
   kycDocUrl        String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
-  // Relations
   items            OrderItem[]
   cancellation     CancellationRequest?
 }
@@ -143,7 +145,7 @@ model CancellationRequest {
   orderId          String    @unique
   order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   reason           String
-  status           String    @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  status           String    @default("PENDING")
   resolvedByUserId String?
   resolvedByUser   User?     @relation("ResolvedBy", fields: [resolvedByUserId], references: [id])
   resolvedAt       DateTime?
@@ -163,7 +165,7 @@ model ContactMessage {
 model CmsContent {
   id        String   @id @default(uuid())
   key       String   @unique
-  value     String   // Stores stringified JSON configuration for the section
+  value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -173,7 +175,7 @@ model Notification {
   userId    String
   title     String
   message   String
-  type      String   // E.g., "INFO", "ORDER_PLACED", "ORDER_STATUS", "KYC_STATUS", "CANCELLATION"
+  type      String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }

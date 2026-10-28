@@ -6,14 +6,65 @@
 
 @layer base {
   html {
-    font-size: 120%; /* Globally scale up all layout text for better readability */
+    font-size: 100%; 
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+  @media (min-width: 768px) {
+    html {
+      font-size: 106.25%; 
+    }
+  }
+  @media (min-width: 1280px) {
+    html {
+      font-size: 112.5%; 
+    }
   }
   body {
     @apply bg-slate-50 text-slate-800 font-sans antialiased selection:bg-brand-500 selection:text-white;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
   }
 }
 
-/* Light Glassmorphism Styles */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 
+    0 20px 45px -10px rgba(0, 0, 0, 0.1),
+    0 4px 16px 0 rgba(0, 0, 0, 0.04),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.95);
+}
+
+.liquid-glass-input {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.liquid-glass-input:hover {
+  background: #ffffff;
+  border-color: #2a1872;
+}
+
+.liquid-glass-input:focus-within {
+  background: #ffffff;
+  border-color: #2a1872;
+  box-shadow: 0 0 0 2px rgba(42, 24, 114, 0.15);
+}
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
@@ -33,7 +84,6 @@
   transform: translateY(-2px);
 }
 
-/* Premium Light Gradients */
 .gradient-bg {
   background: radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 40%),
               radial-gradient(circle at 90% 80%, rgba(245, 158, 11, 0.02) 0%, transparent 40%),
@@ -44,7 +94,6 @@
   @apply bg-gradient-to-r from-brand-600 via-brand-700 to-accent-600 bg-clip-text text-transparent;
 }
 
-/* Custom Scrollbar for Light Mode */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -63,7 +112,6 @@
   background: #8b5cf6;
 }
 
-/* Calendar styling overrides for disabled dates in Light Mode */
 .disabled-calendar-day {
   color: #cbd5e1 !important;
   text-decoration: line-through;
@@ -72,7 +120,6 @@
   opacity: 0.6;
 }
 
-/* Micro-animations */
 @keyframes pulse-gentle {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.9; transform: scale(0.98); }
@@ -82,12 +129,10 @@
   animation: pulse-gentle 3s infinite ease-in-out;
 }
 
-/* Card gradients matching reference image tags */
 .promo-purple-gradient {
   background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%);
 }
 
-/* Ticker Marquee Animation */
 @keyframes marquee {
   0% { transform: translateX(0%); }
   100% { transform: translateX(-50%); }
@@ -97,4 +142,41 @@
   display: inline-flex;
   white-space: nowrap;
   animation: marquee 30s linear infinite;
+}
+
+.flip-logo-perspective {
+  perspective: 1200px;
+}
+
+.flip-logo-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center center;
+}
+
+.flip-logo-card.is-flipped {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}
+
+.flip-logo-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(0deg) translateZ(1px);
+  -webkit-transform: rotateY(0deg) translateZ(1px);
+}
+
+.flip-logo-face-back {
+  transform: rotateY(180deg) translateZ(1px);
+  -webkit-transform: rotateY(180deg) translateZ(1px);
 }

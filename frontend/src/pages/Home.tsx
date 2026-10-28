@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Search, Camera, Disc, Lightbulb, Mic, Tv, Cpu, Battery,
-  Star, CheckCircle2, ArrowRight, ChevronRight, Sparkles, ShieldCheck,
-  Truck, HelpCircle, MapPin, Calendar, Heart, Award
+  Search, CheckCircle2, ArrowRight, ChevronRight, Sparkles,
+  MapPin, Calendar, Heart, Phone, Check, ChevronDown, MessageSquare,
+  PhoneCall, Building2,
+  X, Filter
 } from 'lucide-react';
-import { apiRequest } from '../utils/api';
-import { useCmsStore } from '../store/cmsStore';
+import { gsap } from 'gsap';
+import { apiRequest, getProductImageUrl } from '../utils/api';
+import {
+  SonyLogo, CanonLogo, DjiLogo, AputureLogo, NanluxLogo, GoProLogo,
+  RedCinemaLogo, BlackmagicLogo, ZeissLogo, SennheiserLogo,
+  AmazonLogo, ZohoLogo, MarutiSuzukiLogo, PrimeVideoLogo, ZomatoLogo,
+  LenskartLogo, ZeptoLogo, CodingNinjasLogo, BombayShavingLogo, GrowsterLogo
+} from '../components/BrandLogos';
+import { SONY_SERIES_PRODUCTS, SONY_SERIES_SECTIONS } from '../data/sonySeriesData';
 
 interface Product {
   id: string;
@@ -26,538 +34,822 @@ interface Product {
   };
 }
 
+const INITIAL_FEATURED_PRODUCTS: Product[] = [
+  {
+    id: 'feat-1',
+    name: 'Canon EOS R5 8K Full-Frame Mirrorless Camera',
+    slug: 'canon-eos-r5',
+    description: '45MP Full-Frame CMOS Sensor, 8K30 Raw Video, Dual Pixel CMOS AF II.',
+    dailyRate: 2500,
+    weeklyRate: 15000,
+    depositAmount: 10000,
+    images: '/images/products/canon-eos-r5.jpg',
+    category: { name: 'Cameras', slug: 'cameras' },
+    vendor: { name: 'CameraRent Pro Studio' }
+  },
+  {
+    id: 'feat-2',
+    name: 'Sony FX3 Full-Frame Cinema Line Camera',
+    slug: 'sony-fx3',
+    description: '4K 120p 10-bit 4:2:2, S-Cinetone, Active Cooling, XLR Handle Unit.',
+    dailyRate: 2800,
+    weeklyRate: 16500,
+    depositAmount: 12000,
+    images: '/images/products/sony-fx3.jpg',
+    category: { name: 'Cameras', slug: 'cameras' },
+    vendor: { name: 'CameraRent Pro Studio' }
+  },
+  {
+    id: 'feat-3',
+    name: 'Canon RF 50mm f/1.2L USM Prime Lens',
+    slug: 'canon-rf-50-f1-2l',
+    description: 'Ultra-fast f/1.2 aperture prime lens for razor-sharp portraits and cinema.',
+    dailyRate: 1500,
+    weeklyRate: 9000,
+    depositAmount: 6000,
+    images: '/images/products/canon-rf-50-f1-2l.jpg',
+    category: { name: 'Lenses', slug: 'lenses' },
+    vendor: { name: 'Apex Cinema Rentals' }
+  },
+  {
+    id: 'feat-4',
+    name: 'Aputure LS 600d Pro Daylight LED Light',
+    slug: 'aputure-ls-600d-pro',
+    description: '600W COB Daylight Bowens Mount Point-Source LED for High-Output Studio Lighting.',
+    dailyRate: 2200,
+    weeklyRate: 13000,
+    depositAmount: 8000,
+    images: '/images/products/aputure-ls-600d-pro.jpg',
+    category: { name: 'Lights', slug: 'lights' },
+    vendor: { name: 'CameraRent Pro Studio' }
+  },
+  {
+    id: 'feat-5',
+    name: 'Sony FX6 Full-Frame Cinema Camera Body',
+    slug: 'sony-fx6',
+    description: 'Electronic Variable ND Filter, 15+ Stops Dynamic Range, 4K 120p Cinema Rig.',
+    dailyRate: 4500,
+    weeklyRate: 27000,
+    depositAmount: 15000,
+    images: '/images/products/sony-fx6.jpg',
+    category: { name: 'Cameras', slug: 'cameras' },
+    vendor: { name: 'Apex Cinema Rentals' }
+  },
+  {
+    id: 'feat-6',
+    name: 'Sony FE 24-70mm f/2.8 GM II Lens',
+    slug: 'sony-fe-24-70-gm-ii',
+    description: 'G Master standard zoom lens with XD Linear Motors for fast silent autofocus.',
+    dailyRate: 1600,
+    weeklyRate: 9500,
+    depositAmount: 6000,
+    images: '/images/products/sony-fe-24-70-gm-ii.jpg',
+    category: { name: 'Lenses', slug: 'lenses' },
+    vendor: { name: 'CameraRent Pro Studio' }
+  },
+  {
+    id: 'feat-7',
+    name: 'RED Komodo 6K Global Shutter Cinema Camera',
+    slug: 'red-komodo-6k',
+    description: 'Super 35 Global Shutter CMOS, 6K REDCODE RAW for Feature Films & Commercials.',
+    dailyRate: 5500,
+    weeklyRate: 32000,
+    depositAmount: 20000,
+    images: '/images/products/red-komodo-6k.jpg',
+    category: { name: 'Cameras', slug: 'cameras' },
+    vendor: { name: 'Apex Cinema Rentals' }
+  },
+  {
+    id: 'feat-8',
+    name: 'DJI RS 3 Pro 3-Axis Motorized Carbon Gimbal',
+    slug: 'dji-rs3-pro-gimbal',
+    description: '4.5kg Tested Payload, Automated Axis Locks, LiDAR Range Finder Support.',
+    dailyRate: 1200,
+    weeklyRate: 7000,
+    depositAmount: 5000,
+    images: '/images/products/dji-rs3-pro-gimbal.jpg',
+    category: { name: 'Support & Rigs', slug: 'support' },
+    vendor: { name: 'CameraRent Pro Studio' }
+  }
+];
+
 export default function Home() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const { contents } = useCmsStore();
+  const [products, setProducts] = useState<Product[]>(INITIAL_FEATURED_PRODUCTS);
+  const [searchText, setSearchText] = useState('');
+  const [selectedCity, setSelectedCity] = useState('Delhi NCR');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [cityModalOpen, setCityModalOpen] = useState(false);
+  const [expertModalOpen, setExpertModalOpen] = useState(false);
+  const [wishlist, setWishlist] = useState<string[]>([]);
 
-  const hero = contents.home_hero || {
-    sparkText: "India's Premium Creative Gear Marketplace",
-    titleLine1: 'Own the Experience',
-    titleLine2: 'Rent the Gear',
-    description: 'Why buy when you can upgrade? Rent cameras, lenses, stabilizers, and audio packs from verified local vendors with zero cash deposit holds.'
-  };
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const cta = contents.home_cta || {
-    badge: 'First Rent Offer',
-    title: 'Claim 10% Off Your First Gear Booking',
-    description: 'Rent your favorite gear today. Verified creators, zero deposit holds, instant WhatsApp confirmation.',
-    buttonText: 'Claim Now!',
-    link: '/catalog'
-  };
+  const cities = ['Delhi NCR', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata'];
 
-  const servicesList = contents.services || [
-    { id: 's1', name: 'Cost-Effective', description: 'Save upto 80% on gear.' },
-    { id: 's2', name: 'Flexibility', description: 'Rent what you need.' },
-    { id: 's3', name: 'Latest Gear', description: 'Access the latest tech.' },
-    { id: 's4', name: 'Support', description: '24x7 hassle-free support.' }
+  const creatorCategories = [
+    { name: 'Cameras', slug: 'cameras', image: '/images/products/sony-fx3.jpg', count: '45+ Cameras' },
+    { name: 'Lenses', slug: 'lenses', image: '/images/products/canon-rf-50-f1-2l.jpg', count: '60+ Lenses' },
+    { name: 'Lighting Equipment', slug: 'lights', image: '/images/products/aputure-ls-600d-pro.jpg', count: '40+ Lights' },
+    { name: 'Monitors', slug: 'monitors', image: '/images/products/atomos-shogun-inferno-7.jpg', count: '14+ Monitors' },
+    { name: 'Tripods', slug: 'tripods', image: '/images/products/sachtler-video-tripod.jpg', count: '15+ Tripods' },
+    { name: 'Support & Rigs', slug: 'support', image: '/images/products/dji-ronin-2-gimbal.jpg', count: '12+ Support & Rigs' },
+    { name: 'Drones', slug: 'drones', image: '/images/products/dji-mavic-3-pro.jpg', count: '5+ Aerial Drones' },
+    { name: 'Lighting Accessories', slug: 'lighting-accessories', image: '/images/products/c-stand-turtle-base.jpg', count: '15+ Grip & Filters' },
+    { name: 'Audio', slug: 'audio', image: '/images/products/dji-mic-2-wireless.jpg', count: '25+ Audio Kits' },
+    { name: 'Manpower / Crew', slug: 'manpower', image: '/images/products/sony-fx9.jpg', count: '9+ Crew Services' },
   ];
 
-  const testimonials = contents.testimonials || [];
-  const clientLogos = contents.client_logos || [];
+  const gearBrands = [
+    { name: 'Sony', logo: SonyLogo, logoUrl: '/images/logo/sony.png', count: '38 Products' },
+    { name: 'Canon', logo: CanonLogo, logoUrl: '/images/logo/canon.png', count: '34 Products' },
+    { name: 'DJI', logo: DjiLogo, logoUrl: '/images/logo/dji.png', count: '22 Products' },
+    { name: 'Aputure', logo: AputureLogo, logoUrl: '/images/logo/aputure.png', count: '19 Products' },
+    { name: 'Nanlux', logo: NanluxLogo, logoUrl: '/images/logo/nanlux.png', count: '12 Products' },
+    { name: 'GoPro', logo: GoProLogo, logoUrl: '/images/logo/gopro.png', count: '10 Products' },
+    { name: 'RED', logo: RedCinemaLogo, logoUrl: '/images/logo/red.png', count: '8 Products' },
+    { name: 'Blackmagic', logo: BlackmagicLogo, logoUrl: '/images/logo/blackmagic.png', count: '15 Products' },
+    { name: 'ZEISS', logo: ZeissLogo, logoUrl: '/images/logo/zeiss.png', count: '14 Products' },
+    { name: 'Sennheiser', logo: SennheiserLogo, logoUrl: '/images/logo/sennheiser.png', count: '16 Products' },
+  ];
 
-  // Search & Navigation States
-  const [searchText, setSearchText] = useState('');
-  const [selectedCity, setSelectedCity] = useState('Mumbai');
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [rentalDates, setRentalDates] = useState({ start: '', end: '' });
-  const [showPromoModal, setShowPromoModal] = useState(false);
+  const enterpriseClients = [
+    { name: 'Maruti Suzuki', logo: MarutiSuzukiLogo },
+    { name: 'Amazon', logo: AmazonLogo },
+    { name: 'Zoho', logo: ZohoLogo },
+    { name: 'Prime Video', logo: PrimeVideoLogo },
+    { name: 'Zomato', logo: ZomatoLogo },
+    { name: 'Lenskart', logo: LenskartLogo },
+    { name: 'Zepto', logo: ZeptoLogo },
+    { name: 'Coding Ninjas', logo: CodingNinjasLogo },
+    { name: 'Bombay Shaving Co', logo: BombayShavingLogo },
+    { name: 'Growster', logo: GrowsterLogo },
+  ];
 
-  // Fetch all products for front page arrivals & popular
   useEffect(() => {
     async function loadProducts() {
       try {
         const data = await apiRequest('/products');
-        setProducts(data);
+        if (Array.isArray(data) && data.length > 0) {
+          const flagships = data.filter((p: Product) =>
+            /fx3|fx6|eos r5|komodo|24-70|50mm|600d|rs3|mavic/i.test(p.name)
+          );
+          const others = data.filter((p: Product) =>
+            !/fx3|fx6|eos r5|komodo|24-70|50mm|600d|rs3|mavic/i.test(p.name)
+          );
+          setProducts([...flagships, ...others]);
+        }
       } catch (err) {
-        console.error('Failed to load home products:', err);
-      } finally {
-        setLoading(false);
+        console.error('Using default featured products:', err);
       }
     }
     loadProducts();
   }, []);
 
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        '.gsap-hero-content',
+        { y: 20 },
+        { y: 0, duration: 0.7, ease: 'power3.out', clearProps: 'transform' }
+      );
+
+      gsap.fromTo(
+        '.gsap-brand-card',
+        { y: 15, scale: 0.96 },
+        { y: 0, scale: 1, stagger: 0.04, duration: 0.45, ease: 'back.out(1.4)', clearProps: 'transform' }
+      );
+
+      gsap.fromTo(
+        '.gsap-cat-item',
+        { y: 18, scale: 0.96 },
+        { y: 0, scale: 1, stagger: 0.05, duration: 0.5, ease: 'power2.out', clearProps: 'transform' }
+      );
+
+      gsap.to('.gsap-floating-expert', {
+        y: -8,
+        duration: 2.2,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut'
+      });
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  const handleCardHover = (e: React.MouseEvent<HTMLElement>, enter: boolean) => {
+    gsap.to(e.currentTarget, {
+      y: enter ? -6 : 0,
+      scale: enter ? 1.02 : 1,
+      duration: 0.25,
+      ease: 'power2.out'
+    });
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    let query = `/catalog?city=${selectedCity}`;
+    let query = `/catalog?city=${encodeURIComponent(selectedCity)}`;
+    if (selectedCategory !== 'all') {
+      query += `&category=${encodeURIComponent(selectedCategory)}`;
+    }
     if (searchText.trim()) {
       query += `&search=${encodeURIComponent(searchText.trim())}`;
-    }
-    if (rentalDates.start && rentalDates.end) {
-      query += `&startDate=${rentalDates.start}&endDate=${rentalDates.end}`;
     }
     navigate(query);
   };
 
-  const handleClaimPromo = async () => {
-    try {
-      await apiRequest('/orders/first-discount-inquiry', { method: 'POST' });
-    } catch (err) {
-      console.error('Failed to trigger discount inquiry message:', err);
-    }
-
-    const supportPhone = '919999999999';
-    const supportMsg = "Hello camerarent, I’m renting for the first time. How can I avail the 10% off?";
-    const supportUrl = `https://wa.me/${supportPhone}?text=${encodeURIComponent(supportMsg)}`;
-    window.open(supportUrl, '_blank');
-
-    navigate('/catalog');
+  const toggleWishlist = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setWishlist(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
   };
-
-  const getCategoryIcon = (slug: string) => {
-    switch (slug) {
-      case 'cameras': return <Camera className="w-5 h-5 text-brand-600" />;
-      case 'lenses': return <Disc className="w-5 h-5 text-brand-600" />;
-      case 'lights': return <Lightbulb className="w-5 h-5 text-brand-600" />;
-      case 'audio': return <Mic className="w-5 h-5 text-brand-600" />;
-      case 'support': return <Tv className="w-5 h-5 text-brand-600" />;
-      case 'accessories': return <Cpu className="w-5 h-5 text-brand-600" />;
-      default: return <Battery className="w-5 h-5 text-brand-600" />;
-    }
-  };
-
-  // Slice list to display small grids
-  const trendingProducts = products.slice(0, 5);
-  const newArrivals = products.slice(5, 9);
 
   return (
-    <div className="bg-slate-50 min-h-screen text-slate-800 space-y-16 pb-20">
+    <div ref={containerRef} className="bg-[#F8F9FC] min-h-screen text-slate-900 pb-20">
 
-      {/* 1. INTERACTIVE HERO SECTION */}
-      <div className="max-w-7xl mx-auto px-4 pt-8">
-        <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-slate-850 to-indigo-950 p-8 md:p-16 overflow-hidden shadow-2xl border border-white/5 text-white flex flex-col items-center text-center gap-8">
+      <div className="relative text-slate-900 pt-8 pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden shadow-2xl">
 
-          {/* Animated Background Lights */}
-          <div className="absolute top-0 left-1/4 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl animate-pulse-gentle"></div>
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent-500/5 rounded-full blur-3xl animate-pulse-gentle delay-700"></div>
+        <div className="absolute inset-0 pointer-events-none select-none z-0">
+          <img
+            src="/images/hero-banner-camera.jpg"
+            alt="Hero Camera Equipment"
+            className="w-full h-full object-cover object-bottom"
+          />
+        </div>
 
-          {/* Floating Camera Badges/Visual Teasers */}
-          <div className="absolute right-6 top-8 hidden xl:flex flex-col gap-3 bg-white/5 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 shadow-lg scale-90 hover:scale-95 transition-all duration-300">
-            <img
-              src="https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=150&q=80"
-              alt="Sony FX3"
-              className="w-24 h-16 object-cover rounded-lg"
-            />
-            <div>
-              <p className="text-xs font-bold text-white leading-tight">Sony FX3 Cinema</p>
-              <p className="text-xs text-amber-400 font-bold mt-0.5">Verified Hub</p>
+        <div className="max-w-7xl mx-auto space-y-10 relative z-10 gsap-hero-content">
+
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 text-xs">
+            <div className="flex items-center gap-6">
             </div>
-          </div>
 
-          <div className="absolute left-6 bottom-8 hidden xl:flex flex-col gap-3 bg-white/5 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 shadow-lg scale-90 hover:scale-95 transition-all duration-300">
-            <img
-              src="https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&w=150&q=80"
-              alt="DJI Drone"
-              className="w-24 h-16 object-cover rounded-lg"
-            />
-            <div>
-              <p className="text-xs font-bold text-white leading-tight">DJI Inspire 3 Drone</p>
-              <p className="text-xs text-green-400 font-bold mt-0.5">Verified Calibrated</p>
-            </div>
-          </div>
-
-          {/* Hero Titles */}
-          <div className="space-y-4 max-w-3xl z-10">
-            <span className="inline-flex items-center gap-1.5 bg-brand-500/20 border border-brand-500/30 text-brand-300 text-xs font-extrabold px-3.5 py-1.5 rounded-full uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" /> {hero.sparkText}
-            </span>
-            <h1 className="text-3xl md:text-6xl font-black tracking-tight leading-none font-sans">
-              {hero.titleLine1} <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-accent-400">{hero.titleLine2}</span>
-            </h1>
-            <p className="text-xs md:text-sm text-slate-300 font-medium max-w-xl mx-auto leading-relaxed">
-              {hero.description}
-            </p>
-          </div>
-
-          {/* FLOATING SEARCH / FILTER DECK PILL */}
-          <form
-            onSubmit={handleSearchSubmit}
-            className="w-full max-w-4xl bg-white text-slate-800 rounded-3xl p-3 shadow-2xl flex flex-col lg:flex-row gap-2.5 z-20 border border-slate-100"
-          >
-            {/* City Selector */}
-            {/* <div className="relative flex items-center px-4 py-2 hover:bg-slate-50 rounded-2xl cursor-pointer transition shrink-0 border-b lg:border-b-0 lg:border-r border-slate-100">
-              <div
-                className="flex items-center gap-2 w-full justify-between lg:justify-start"
-                onClick={() => setShowCityDropdown(!showCityDropdown)}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setCityModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/70 hover:bg-white border border-slate-300 text-xs font-bold transition text-slate-900 cursor-pointer shadow-sm"
               >
-                <MapPin className="w-4 h-4 text-brand-600 shrink-0" />
-                <div className="text-left">
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">City</span>
-                  <span className="text-xs font-bold text-slate-800">{selectedCity}</span>
-                </div>
-              </div>
-              {showCityDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-40 bg-white border border-slate-100 rounded-2xl shadow-xl p-2 z-50 text-xs font-bold text-slate-700 flex flex-col gap-1 text-left">
-                  {['Mumbai', 'Delhi NCR', 'Bengaluru', 'Pune', 'Hyderabad'].map(city => (
-                    <button
-                      key={city}
-                      type="button"
-                      onClick={() => { setSelectedCity(city); setShowCityDropdown(false); }}
-                      className="px-3.5 py-2 hover:bg-slate-50 rounded-xl text-left font-bold"
-                    >
-                      {city}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div> */}
+                <MapPin className="w-3.5 h-3.5 text-purple-600" />
+                <span>Location: {selectedCity}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-700 opacity-70" />
+              </button>
 
-            {/* Date Picker Range Picker */}
-            {/* <div className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 rounded-2xl transition flex-1 border-b lg:border-b-0 lg:border-r border-slate-100">
-              <Calendar className="w-4 h-4 text-brand-600 shrink-0" />
-              <div className="grid grid-cols-2 gap-2 text-left w-full">
-                <div>
-                  <span className="text-xs text-slate-400 font-bold uppercase block">Rental Start</span>
-                  <input
-                    type="date"
-                    value={rentalDates.start}
-                    onChange={(e) => setRentalDates({ ...rentalDates, start: e.target.value })}
-                    className="bg-transparent text-xs font-bold text-slate-800 border-none outline-none p-0 cursor-pointer w-full focus:ring-0"
-                  />
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 font-bold uppercase block">Rental End</span>
-                  <input
-                    type="date"
-                    value={rentalDates.end}
-                    onChange={(e) => setRentalDates({ ...rentalDates, end: e.target.value })}
-                    className="bg-transparent text-xs font-bold text-slate-800 border-none outline-none p-0 cursor-pointer w-full focus:ring-0"
-                  />
-                </div>
-              </div>
-            </div> */}
+              <Link
+                to="/contact"
+                className="hidden sm:inline-flex items-center gap-1.5 text-slate-900 hover:text-purple-700 transition font-bold"
+              >
+                <Phone className="w-3.5 h-3.5 text-purple-600" /> +91 98712 34567
+              </Link>
+            </div>
+          </div>
 
-            {/* General Search Input */}
-            <div className="flex items-center gap-2 flex-1 px-4 py-2 rounded-2xl hover:bg-slate-50 transition border-b lg:border-b-0 border-slate-100 lg:border-none">
-              <Search className="w-4 h-4 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                placeholder="Search Sony FX3, RED, prime lenses..."
-                className="bg-transparent text-xs font-semibold text-slate-800 placeholder-slate-400 border-none outline-none w-full p-0 focus:ring-0"
-              />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+
+            <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 backdrop-blur-md border border-slate-300 text-xs font-bold text-slate-900 shadow-sm">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span>India's Premier Cinema & Camera Rental Marketplace</span>
+              </div>
+
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.12] text-black">
+                POWER <span className="text-black">EVERY PRODUCTION</span>
+              </h1>
+
+              <p className="text-sm sm:text-base text-slate-800 max-w-xl font-semibold leading-relaxed mx-auto lg:mx-0">
+                Rent Professional Cameras, Cine Lenses & Production Gear for Your Next Big Shoot.
+              </p>
+
+              <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-4">
+
+              </div>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              className="bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-md shadow-brand-500/20 transition flex items-center justify-center gap-1 cursor-pointer"
-            >
-              Search Gear <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </form>
-
-        </div>
-      </div>
-
-      {/* 2. PASSIVE INCOME ASSET BANNER */}
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="bg-gradient-to-r from-blue-600 to-brand-700 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 text-white shadow-lg shadow-blue-500/10 border border-blue-400/15">
-          <div className="space-y-1 text-center md:text-left">
-            <span className="bg-white/20 text-white text-xs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Passive Earning</span>
-            <h3 className="text-lg md:text-xl font-extrabold tracking-tight mt-1">Fund CameraRent's Creative Assets</h3>
-            <p className="text-xs text-blue-100">Rent out your redundant cameras, lens scopes, or lights and secure weekly bank payouts.</p>
           </div>
-          <Link
-            to="/vendor-onboarding"
-            className="px-5 py-2.5 bg-white text-blue-700 font-extrabold text-xs rounded-xl shadow-md hover:scale-105 transition shrink-0"
-          >
-            Start Renting Out
-          </Link>
+
+          <div className="relative">
+            <div className="relative liquid-glass rounded-3xl p-3 sm:p-4 shadow-xl border border-slate-200/80 transition-all duration-300">
+              <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row items-center gap-3">
+
+                <div
+                  onClick={() => setCityModalOpen(true)}
+                  className="w-full md:w-auto flex items-center gap-2.5 px-4 py-3 liquid-glass-input rounded-2xl cursor-pointer shrink-0"
+                >
+                  <MapPin className="w-4 h-4 text-[#2a1872] shrink-0" />
+                  <div className="text-left">
+                    <span className="text-[10px] uppercase font-extrabold text-slate-600 block leading-none">City Hub</span>
+                    <span className="text-xs font-black text-black">{selectedCity}</span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-700 ml-1" />
+                </div>
+
+                <div className="w-full md:w-auto relative shrink-0">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full md:w-44 px-4 py-3.5 liquid-glass-input rounded-2xl text-xs font-black text-black appearance-none focus:outline-none cursor-pointer"
+                  >
+                    <option value="all" className="bg-white text-black py-1">All Categories</option>
+                    <option value="cameras" className="bg-white text-black py-1">Cameras</option>
+                    <option value="lenses" className="bg-white text-black py-1">Lenses</option>
+                    <option value="lights" className="bg-white text-black py-1">Lighting Equipment</option>
+                    <option value="monitors" className="bg-white text-black py-1">Monitors</option>
+                    <option value="tripods" className="bg-white text-black py-1">Tripods</option>
+                    <option value="support" className="bg-white text-black py-1">Camera Support & Rigs</option>
+                    <option value="drones" className="bg-white text-black py-1">Drones</option>
+                    <option value="lighting-accessories" className="bg-white text-black py-1">Lighting Accessories</option>
+                    <option value="audio" className="bg-white text-black py-1">Audio</option>
+                    <option value="manpower" className="bg-white text-black py-1">Manpower / Crew</option>
+                    <option value="accessories" className="bg-white text-black py-1">Accessories</option>
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-slate-700 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-1 w-full px-4 py-2.5 liquid-glass-input rounded-2xl">
+                  <Search className="w-5 h-5 text-[#2a1872] shrink-0" />
+                  <input
+                    type="text"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    placeholder="What are you Creating Today? Search Sony FX3, Canon R5, 85mm, Aputure 600d..."
+                    className="w-full bg-transparent text-sm font-semibold text-black placeholder-slate-500 focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full md:w-auto px-8 py-3.5 bg-[#2a1872] hover:bg-[#1f1157] text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-[#2a1872]/25 hover:shadow-[#2a1872]/40 transition-all cursor-pointer shrink-0 flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <span>Search Gear</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+              </form>
+            </div>
+          </div>
+
         </div>
       </div>
 
-      {/* 3. CATEGORIES HORIZONTAL NAVIGATION ROW */}
-      <div className="max-w-7xl mx-auto px-4 space-y-4">
-        <div className="flex justify-between items-end">
-          <h2 className="text-lg font-extrabold text-slate-900">Top Categories to choose from</h2>
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {[
-            { name: 'DSLR & Cinema', slug: 'cameras' },
-            { name: 'Prime Lenses', slug: 'lenses' },
-            { name: 'Studio Lights', slug: 'lights' },
-            { name: 'Audio Gears', slug: 'audio' },
-            { name: 'Stands & Support', slug: 'support' },
-            { name: 'Creator Kits', slug: 'accessories' },
-          ].map((c) => (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16 pt-12">
+
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-slate-200 pb-4">
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-widest text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
+                Official Brand Partners
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-2">
+                Search by Brands
+              </h2>
+            </div>
             <Link
-              key={c.slug}
-              to={`/catalog?category=${c.slug}`}
-              className="bg-white border border-slate-100 hover:border-brand-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 text-center shadow-sm group hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
+              to="/catalog"
+              className="text-xs font-bold text-purple-700 hover:text-purple-800 flex items-center gap-1"
             >
-              <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                {getCategoryIcon(c.slug)}
-              </div>
-              <span className="text-xs font-bold text-slate-700 leading-tight group-hover:text-brand-600">{c.name}</span>
+              Browse All Brands in Catalog <ChevronRight className="w-4 h-4" />
             </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* 4. TRENDING ITEMS HORIZONTAL CAROUSEL */}
-      <div className="max-w-7xl mx-auto px-4 space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-extrabold text-slate-900">Trending Items people love to rent</h2>
-            <p className="text-xs text-slate-400 mt-1">High-demand camera rigs, audio nodes, and slider accessories.</p>
           </div>
-          <Link to="/catalog" className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-0.5">
-            See all Products <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
 
-        {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-64 bg-white rounded-2xl border border-slate-100 animate-pulse shadow-sm"></div>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {gearBrands.map((b, idx) => {
+              const LogoComponent = b.logo;
+              return (
+                <button
+                  key={idx}
+                  onMouseEnter={(e) => handleCardHover(e, true)}
+                  onMouseLeave={(e) => handleCardHover(e, false)}
+                  onClick={() => navigate(`/catalog?brand=${encodeURIComponent(b.name)}`)}
+                  className="gsap-brand-card bg-white border-2 border-slate-200/80 hover:border-purple-500 rounded-3xl p-5 text-center shadow-sm hover:shadow-xl transition-colors cursor-pointer flex flex-col items-center justify-between gap-4 group h-32"
+                >
+                  <div className="flex-1 w-full flex items-center justify-center px-2 py-1">
+                    {b.logoUrl ? (
+                      <img
+                        src={b.logoUrl}
+                        alt={`${b.name} logo`}
+                        className="h-8 sm:h-9 w-auto max-w-[130px] max-h-9 object-contain group-hover:scale-110 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <LogoComponent className="h-8 w-auto max-w-[140px]" />
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100 w-full pt-2 flex items-center justify-center text-xs">
+                    <span className="font-extrabold text-slate-800 group-hover:text-purple-700">
+                      {b.name}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200">
-            {trendingProducts.map((p) => (
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900">Crafted</h2>
+                <span className="px-3.5 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-black uppercase tracking-wider">
+                  for Creators
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">Explore categorized professional production equipment</p>
+            </div>
+            <Link to="/catalog" className="text-xs font-bold text-purple-700 hover:text-purple-800 flex items-center gap-1">
+              Explore All Categories <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10 gap-3 sm:gap-4">
+            {creatorCategories.map((cat, idx) => (
               <Link
-                key={p.id}
-                to={`/products/${p.slug}`}
-                className="w-56 h-[340px] shrink-0 bg-white border border-slate-100 hover:border-brand-500/20 rounded-[32px] p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group"
+                key={idx}
+                to={`/catalog?category=${cat.slug}`}
+                onMouseEnter={(e) => handleCardHover(e, true)}
+                onMouseLeave={(e) => handleCardHover(e, false)}
+                className="gsap-cat-item bg-white border-2 border-slate-200/80 hover:border-purple-500 rounded-3xl p-4 text-center shadow-sm hover:shadow-xl transition-colors flex flex-col items-center justify-between group cursor-pointer"
               >
-                <div className="space-y-4">
-                  <div className="h-36 w-full rounded-[24px] overflow-hidden bg-slate-50 relative shrink-0">
-                    {/* Fallback Camera Icon for Broken Images */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-slate-350">
-                      <Camera className="w-8 h-8 opacity-30 text-slate-400" />
-                      <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">No Preview</span>
-                    </div>
-                    <img
-                      src={p.images.split(',')[0]}
-                      alt={p.name}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 z-10"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <span className="absolute top-3 left-3 bg-slate-900/65 backdrop-blur-md text-white text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full border border-white/10 z-20 tracking-wider">
-                      {p.category.name}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 px-1 text-left">
-                    <span className="text-[10px] text-brand-600 font-extrabold uppercase tracking-widest block">
-                      {p.vendor.name.split(' ')[0]} Verified
-                    </span>
-                    <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-snug group-hover:text-brand-650 transition duration-300 h-12">
-                      {p.name}
-                    </h3>
-                  </div>
+                <div className="w-20 h-20 rounded-2xl bg-slate-50 p-2 flex items-center justify-center overflow-hidden border border-slate-100">
+                  <img
+                    src={cat.image}
+                    alt={cat.name}
+                    className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
+                  />
                 </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between px-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    <span className="text-xs font-extrabold text-green-600 uppercase tracking-wider block">Available</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-700">5.0</span>
-                  </div>
+                <div className="mt-3 space-y-0.5 w-full">
+                  <h3 className="text-xs font-black text-slate-900 group-hover:text-purple-700">
+                    {cat.name}
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-bold block">
+                    {cat.count}
+                  </span>
                 </div>
               </Link>
             ))}
           </div>
-        )}
-      </div>
+        </section>
 
-      {/* 5. PROMO BANNER SECTION */}
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="relative rounded-[40px] bg-white border border-slate-100 shadow-xl overflow-hidden py-12 md:py-16 px-6 text-center flex flex-col items-center gap-6">
-          {/* Background Doodles */}
-          <div className="absolute top-4 left-6 text-slate-100 -rotate-12 select-none pointer-events-none hidden sm:block">
-            <Camera className="w-16 h-16 opacity-35 text-slate-250" />
-          </div>
-          <div className="absolute bottom-6 right-8 text-slate-105 rotate-12 select-none pointer-events-none hidden sm:block">
-            <Disc className="w-20 h-20 opacity-35 text-slate-250" />
-          </div>
-          <div className="absolute top-1/2 left-8 -translate-y-1/2 text-slate-105 -rotate-6 select-none pointer-events-none hidden lg:block">
-            <div className="text-4xl opacity-20 font-black text-slate-250">10%</div>
-          </div>
-          <div className="absolute top-6 right-16 text-slate-105 rotate-6 select-none pointer-events-none hidden lg:block">
-            <Lightbulb className="w-14 h-14 opacity-25 text-slate-250" />
-          </div>
-          <div className="absolute bottom-4 left-16 text-slate-105 rotate-45 select-none pointer-events-none hidden lg:block">
-            <Tv className="w-16 h-16 opacity-20 text-slate-250" />
-          </div>
+        {SONY_SERIES_SECTIONS.map((series) => {
+          const seriesItems = SONY_SERIES_PRODUCTS
+            .filter((item) => item.seriesTitle === series.title)
+            .sort((a, b) => a.seriesOrder - b.seriesOrder);
 
-          <div className="space-y-3 max-w-2xl z-10">
-            <span className="text-xs md:text-xs font-black text-slate-400 uppercase tracking-widest block">
-              {cta.badge}
+          return (
+            <section key={series.id} className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b-2 border-purple-200/80 pb-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="px-3 py-1 rounded-full bg-purple-700 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+                      {series.badge}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                      Category: {series.categoryLabel} • Type: {series.typeLabel}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+                    {series.title}
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {series.subtitle}
+                  </p>
+                </div>
+                <Link
+                  to={`/catalog?subcategory=${encodeURIComponent(series.title)}`}
+                  className="text-xs font-extrabold text-purple-700 hover:text-purple-900 flex items-center gap-1"
+                >
+                  View {series.title} in Catalog <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {seriesItems.map((item) => {
+                  const dbMatch = products.find(
+                    (p) =>
+                      p.slug?.toLowerCase() === item.slug.toLowerCase() ||
+                      p.name?.toLowerCase() === item.name.toLowerCase()
+                  );
+                  const resolvedImages = dbMatch?.images || item.images;
+                  const isFav = wishlist.includes(item.slug);
+                  const isPriceOnRequest = Boolean(item.priceOnRequest || item.dailyRate === 0);
+                  return (
+                    <div
+                      key={item.slug}
+                      onMouseEnter={(e) => handleCardHover(e, true)}
+                      onMouseLeave={(e) => handleCardHover(e, false)}
+                      onClick={() => navigate(`/products/${dbMatch?.slug || item.slug}`)}
+                      className="rounded-3xl bg-white border-2 border-slate-200/90 hover:border-purple-600 p-5 shadow-xs hover:shadow-xl transition-colors cursor-pointer flex flex-col justify-between group"
+                    >
+                      <div className="space-y-3.5">
+                        <div className="h-48 w-full rounded-2xl bg-slate-50 relative overflow-hidden flex items-center justify-center p-4 border border-slate-100">
+                          <span className="absolute top-3 left-3 bg-slate-900/85 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-full z-20">
+                            {item.type}
+                          </span>
+
+                          <button
+                            onClick={(e) => toggleWishlist(item.slug, e)}
+                            className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition z-20 ${isFav ? 'bg-pink-500 text-white shadow-md' : 'bg-white hover:bg-pink-50 text-slate-500 hover:text-pink-600 border border-slate-200'
+                              }`}
+                          >
+                            <Heart className="w-4 h-4" fill={isFav ? 'currentColor' : 'none'} />
+                          </button>
+
+                          <img
+                            src={getProductImageUrl(resolvedImages)}
+                            alt={item.name}
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
+                            <span className="text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                              {item.sheetCategory}
+                            </span>
+                            <span className="text-slate-500">
+                              {item.type === 'CREW' ? 'Role' : 'Model'}: <strong className="text-slate-800">{item.model}</strong>
+                            </span>
+                          </div>
+
+                          <h3 className="text-base font-black text-slate-900 line-clamp-1 group-hover:text-purple-700">
+                            {item.name}
+                          </h3>
+
+                          {item.focalLength && (
+                            <span className="inline-block text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">
+                              Focal Length: {item.focalLength}
+                            </span>
+                          )}
+
+                          <div className="pt-1 flex items-baseline justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-slate-400 block leading-none">
+                                {isPriceOnRequest ? 'Crew Rate' : 'Price'}
+                              </span>
+                              {isPriceOnRequest ? (
+                                <div className="text-base font-black text-purple-700 mt-1">
+                                  Price on Request
+                                </div>
+                              ) : (
+                                <div className="text-xl font-black text-slate-900 mt-0.5">
+                                  ₹{item.dailyRate.toLocaleString('en-IN')}
+                                  <span className="text-xs text-slate-500 font-semibold"> /day</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              {isPriceOnRequest ? 'Available' : 'In Stock'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-100 mt-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/products/${dbMatch?.slug || item.slug}`);
+                          }}
+                          className="w-full py-2.5 bg-[#2a1872]/10 hover:bg-[#2a1872] border border-[#2a1872]/20 hover:border-[#2a1872] text-[#2a1872] hover:text-white font-extrabold text-xs rounded-xl transition duration-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          {isPriceOnRequest ? (
+                            <>Book Crew • Price on Request <ArrowRight className="w-3.5 h-3.5" /></>
+                          ) : (
+                            <>Rent Now • ₹{item.dailyRate.toLocaleString('en-IN')} <ArrowRight className="w-3.5 h-3.5" /></>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+
+        <div className="pt-2 text-center">
+          <Link
+            to="/catalog"
+            className="inline-flex items-center gap-2 px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg transition"
+          >
+            View Complete Rate Sheet & All Equipment in Catalog <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        <section className="space-y-6 sm:space-y-8 bg-white border-2 border-slate-200/80 rounded-2xl sm:rounded-[36px] p-6 sm:p-12 shadow-sm text-center">
+          <div className="space-y-2 max-w-xl mx-auto">
+            <span className="text-[11px] font-black uppercase tracking-widest text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
+              Industry Partners
             </span>
-            <h2 className="text-3xl md:text-5xl font-black text-slate-900 leading-tight tracking-tight font-sans">
-              {cta.title}
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+              Our Clients
             </h2>
-            <p className="text-xs md:text-sm text-slate-500 font-medium leading-relaxed max-w-lg mx-auto">
-              {cta.description}
+            <p className="text-xs sm:text-sm text-slate-500 font-medium">
+              We have served some of the biggest clients and production houses in India.
             </p>
           </div>
 
-          {/* Premium Gradient Button with Arrow Icon */}
-          <button
-            onClick={handleClaimPromo}
-            className="z-10 relative flex items-center justify-between gap-6 pl-8 pr-2.5 py-2.5 bg-gradient-to-r from-teal-400 to-indigo-650 hover:from-teal-500 hover:to-indigo-750 text-white font-extrabold text-sm md:text-base rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
-          >
-            <span>{cta.buttonText}</span>
-            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-md">
-              <ArrowRight className="w-4 h-4 text-indigo-650" />
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* 6. WHY CAMORENT */}
-      <div className="max-w-7xl mx-auto px-4 space-y-8">
-        <div className="text-center space-y-1">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">WHY CAMORENT</span>
-          <h2 className="text-2xl md:text-3.5xl font-black text-slate-900 tracking-tight">Trusted by Professionals Across the Globe</h2>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {servicesList.map((s: any, idx: number) => (
-            <div key={s.id || idx} className="flex flex-col items-center text-center gap-4 group">
-              <div className="w-44 h-44 rounded-full overflow-hidden border-2 border-slate-100 shadow-md group-hover:scale-105 transition-transform duration-300 bg-slate-150 relative">
-                <img src={`/circle${(idx % 4) + 1}.png`} alt={s.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-extrabold text-sm text-slate-850">{s.name}</h4>
-                <p className="text-[11px] text-slate-400 font-medium">{s.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 7. NEW ARRIVALS GRID */}
-      <div className="max-w-7xl mx-auto px-4 space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-extrabold text-slate-900">New Arrivals on the platform</h2>
-            <p className="text-xs text-slate-400 mt-1">Freshly seeded setups ready to check out.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {enterpriseClients.map((client, idx) => {
+              const ClientLogo = client.logo;
+              return (
+                <div
+                  key={idx}
+                  onMouseEnter={(e) => handleCardHover(e, true)}
+                  onMouseLeave={(e) => handleCardHover(e, false)}
+                  className="bg-slate-50 hover:bg-white border-2 border-slate-200/80 hover:border-purple-400 rounded-2xl p-5 flex items-center justify-center h-24 shadow-xs hover:shadow-md transition-colors"
+                >
+                  <ClientLogo className="h-8 w-auto max-w-[140px]" />
+                </div>
+              );
+            })}
           </div>
-          <Link to="/catalog" className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-0.5">
-            Browse All <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
+        </section>
 
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-72 bg-white rounded-3xl border border-slate-100 animate-pulse shadow-sm"></div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {newArrivals.map((p) => (
-              <Link
-                key={p.id}
-                to={`/products/${p.slug}`}
-                className="bg-white border border-slate-100 hover:border-brand-500/20 rounded-[32px] p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-[340px]"
+        <section className="rounded-2xl sm:rounded-[36px] bg-gradient-to-r from-purple-100 via-indigo-50 to-purple-100 border-2 border-purple-200 p-6 sm:p-12 flex flex-col md:flex-row items-center justify-between gap-8 shadow-md">
+          <div className="space-y-4 text-center md:text-left max-w-xl">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-purple-200 text-purple-900 text-xs font-black uppercase tracking-wider">
+              <Calendar className="w-3.5 h-3.5 text-purple-700" /> Free shoot planning
+            </span>
+
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight">
+              Need help with your <span className="text-purple-700">shoot?</span>
+            </h3>
+
+            <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+              Schedule a free 15-minute call with a CameraRent shoot expert. Get tailored advice on cameras, cine lenses, and lighting setups.
+            </p>
+
+            <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-4">
+              <button
+                onClick={() => setExpertModalOpen(true)}
+                className="inline-flex items-center gap-2.5 px-7 py-3.5 bg-[#2a1872] hover:bg-[#1f1157] text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-[#2a1872]/25 cursor-pointer transition active:scale-95"
               >
-                <div className="space-y-4">
-                  <div className="h-36 w-full rounded-[24px] overflow-hidden bg-slate-50 relative shrink-0">
-                    {/* Fallback Camera Icon for Broken Images */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-slate-350">
-                      <Camera className="w-8 h-8 opacity-30 text-slate-400" />
-                      <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">No Preview</span>
-                    </div>
-                    <img
-                      src={p.images.split(',')[0]}
-                      alt={p.name}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 z-10"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <span className="absolute top-3 left-3 bg-slate-900/65 backdrop-blur-md text-white text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full border border-white/10 z-20 tracking-wider">
-                      {p.category.name}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 px-1 text-left">
-                    <span className="text-[10px] text-brand-600 font-extrabold uppercase tracking-widest block">
-                      {p.vendor.name.split(' ')[0]} Verified
-                    </span>
-                    <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-snug group-hover:text-brand-650 transition duration-300 h-12">
-                      {p.name}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between px-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    <span className="text-xs font-extrabold text-green-600 uppercase tracking-wider block">Available</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-700">5.0</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                <span>Book your free call</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Testimonials Section */}
-      {testimonials.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 space-y-8 pt-8">
-          <div className="text-center space-y-1">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">TESTIMONIALS</span>
-            <h2 className="text-2xl md:text-3.5xl font-black text-slate-900 tracking-tight">What Creative Directors Say</h2>
+          <div className="shrink-0">
+            <div className="gsap-floating-expert w-48 h-48 sm:w-60 sm:h-60 rounded-full bg-gradient-to-tr from-purple-300 via-purple-200 to-indigo-100 p-2.5 shadow-2xl flex items-center justify-center">
+              <div className="w-full h-full rounded-full overflow-hidden bg-slate-950">
+                <img
+                  src="/circle4.png"
+                  alt="CameraRent Shoot Expert"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((t: any, idx: number) => (
-              <div key={t.id || idx} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm space-y-4 hover:border-brand-200 transition duration-300">
-                <div className="flex items-center gap-0.5 text-amber-500">
-                  {Array.from({ length: t.rating || 5 }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-500" />
-                  ))}
+        </section>
+
+        <section className="rounded-2xl sm:rounded-[36px] bg-white border-2 border-slate-200/80 p-6 sm:p-12 shadow-lg">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-10 items-center">
+
+            <div className="md:col-span-7 space-y-5">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-black uppercase tracking-wider">
+                Elite Access
+              </span>
+
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+                Enterprises Solutions
+              </h3>
+
+              <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed">
+                For brands, agencies and production teams requiring multi-camera setups, custom billing, and priority logistics.
+              </p>
+
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-3 text-xs sm:text-sm font-bold text-slate-800">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>Multi-city support (Delhi NCR, Mumbai, Bengaluru, Hyderabad)</span>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed font-medium italic">
-                  "{t.comment}"
-                </p>
-                <div className="border-t border-slate-50 pt-3">
-                  <h4 className="font-extrabold text-xs text-slate-800">{t.name}</h4>
-                  <p className="text-[10px] text-brand-650 font-bold">{t.role}</p>
+                <div className="flex items-center gap-3 text-xs sm:text-sm font-bold text-slate-800">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>Flexible monthly billing & corporate GST invoicing</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs sm:text-sm font-bold text-slate-800">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>Dedicated account manager & 24/7 on-set replacement support</span>
                 </div>
               </div>
-            ))}
+
+              <div className="pt-2">
+                <button
+                  onClick={() => navigate('/contact')}
+                  className="px-8 py-4 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold text-sm rounded-2xl shadow-xl cursor-pointer inline-flex items-center gap-2"
+                >
+                  <span>Talk to our team</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="md:col-span-5 bg-gradient-to-tr from-purple-50 to-indigo-50 rounded-3xl p-8 border border-purple-100 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="w-20 h-20 rounded-3xl bg-purple-700 text-white flex items-center justify-center shadow-xl">
+                <Building2 className="w-10 h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="font-black text-base text-slate-900">500+ Businesses Trust CameraRent</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Custom production rates, backup standby units, and priority doorstep delivery.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+
+      {cityModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-purple-600" /> Select Operational City
+              </h3>
+              <button
+                onClick={() => setCityModalOpen(false)}
+                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {cities.map((city) => (
+                <button
+                  key={city}
+                  onClick={() => {
+                    setSelectedCity(city);
+                    setCityModalOpen(false);
+                  }}
+                  className={`w-full p-3.5 rounded-2xl text-left text-xs font-bold transition flex items-center justify-between cursor-pointer ${selectedCity === city
+                    ? 'bg-[#2a1872] text-white shadow-md'
+                    : 'bg-slate-50 hover:bg-[#2a1872]/5 text-slate-700'
+                    }`}
+                >
+                  <span>{city}</span>
+                  {selectedCity === city && <Check className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Client Logos Section */}
-      {clientLogos.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 border-t border-slate-200/40 pt-16 space-y-6">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">TRUSTED BY TOP CREATIVE AGENCIES</p>
-          <div className="flex flex-wrap items-center justify-center gap-12 opacity-60">
-            {clientLogos.map((l: any, idx: number) => (
-              <div key={l.id || idx} className="flex items-center gap-2">
-                <img src={l.imageUrl} alt={l.name} className="h-6 object-contain rounded" />
-                <span className="font-bold text-[10px] text-slate-550 uppercase tracking-wider">{l.name}</span>
-              </div>
-            ))}
+      {expertModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full space-y-5 shadow-2xl border border-slate-100 text-center">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setExpertModalOpen(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="w-16 h-16 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center mx-auto shadow-md">
+              <PhoneCall className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-black text-slate-900">Free 15-Min Shoot Planning Call</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Speak directly with our senior cinematographer at our Gautam Nagar, New Delhi hub.
+              </p>
+            </div>
+
+            <div className="p-4 bg-purple-50/70 rounded-2xl border border-purple-200/80 text-left space-y-2 text-xs text-slate-700 font-medium">
+              <p>📍 <strong>Hub Address:</strong> 74, Basement, Gautam Nagar, New Delhi 110049</p>
+              <p>📞 <strong>Direct Line:</strong> +91 98712 34567</p>
+              <p>💬 <strong>WhatsApp:</strong> Instant camera package quotation</p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <a
+                href="https://wa.me/919871234567?text=Hello%20CameraRent,%20I%20need%20assistance%20planning%20gear%20for%20my%20upcoming%20shoot."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-2xl shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4" /> Chat on WhatsApp
+              </a>
+              <button
+                onClick={() => setExpertModalOpen(false)}
+                className="py-3.5 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

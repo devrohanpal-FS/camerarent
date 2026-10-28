@@ -60,7 +60,6 @@ async function runTests() {
 
     console.log('✔ Message submitted successfully!');
 
-    // Verify in database
     console.log('2. Querying database to confirm record was saved...');
     const savedMsg = await prisma.contactMessage.findFirst({
       where: { email: testPayload.email },
@@ -76,7 +75,6 @@ async function runTests() {
     console.log(`   Subject: ${savedMsg.subject}`);
     console.log(`   Message: ${savedMsg.message}`);
 
-    // Verify local preview file
     console.log('3. Verifying local styled HTML preview file...');
     const previewsDir = path.join(__dirname, '../sent-emails');
     const files = fs.readdirSync(previewsDir);

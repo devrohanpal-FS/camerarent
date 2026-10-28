@@ -1,9 +1,5 @@
 import { prisma } from '../db';
 
-/**
- * Checks if a product is available for rental between the specified start and end dates.
- * Excludes a specific order if checking for modifications to that order.
- */
 export async function checkProductAvailability(
   productId: string,
   startDate: Date,
@@ -11,7 +7,6 @@ export async function checkProductAvailability(
   requestedQuantity: number = 1,
   excludeOrderId?: string
 ): Promise<{ available: boolean; reason?: string }> {
-  // Normalize dates to UTC start of start-day and UTC end of end-day
   const start = new Date(startDate);
   start.setUTCHours(0, 0, 0, 0);
   
@@ -22,7 +17,6 @@ export async function checkProductAvailability(
     return { available: false, reason: 'Rental start date must be before the end date.' };
   }
 
-  // 0. Fetch product totalStock
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: { totalStock: true, name: true },
@@ -34,7 +28,6 @@ export async function checkProductAvailability(
 
   const totalStock = product.totalStock;
 
-  // 1. Check manual administrative blackout dates
   const overlappingBlackout = await prisma.productAvailabilityBlackout.findFirst({
     where: {
       productId,
@@ -50,7 +43,6 @@ export async function checkProductAvailability(
     };
   }
 
-  // 2. Check overlapping active bookings
   const bookings = await prisma.orderItem.findMany({
     where: {
       productId,
@@ -63,7 +55,6 @@ export async function checkProductAvailability(
     },
   });
 
-  // Check day by day to see if booked quantity + requestedQuantity exceeds totalStock
   const day = new Date(start);
   while (day <= end) {
     let bookedQty = 0;
@@ -91,11 +82,6 @@ export async function checkProductAvailability(
   return { available: true };
 }
 
-/**
- * Computes all unavailable dates (bookings and blackouts) for a given product.
- * A date is unavailable if the product has a blackout on that date or if all stock is rented.
- * Returns an array of date strings formatted as "YYYY-MM-DD".
- */
 export async function getUnavailableDates(productId: string): Promise<string[]> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
@@ -140,7 +126,6 @@ export async function getUnavailableDates(productId: string): Promise<string[]> 
   for (const dateStr of candidateDates) {
     const date = new Date(dateStr + 'T00:00:00.000Z');
     
-    // Check blackout
     const isBlackout = blackouts.some((b) => {
       const bStart = new Date(b.startDate);
       bStart.setUTCHours(0, 0, 0, 0);
@@ -154,7 +139,6 @@ export async function getUnavailableDates(productId: string): Promise<string[]> 
       continue;
     }
 
-    // Check sum of bookings on this date
     let bookedQty = 0;
     for (const booking of bookings) {
       const bStart = new Date(booking.startDate);

@@ -1,11 +1,9 @@
-// Register ts-node so we can directly import TypeScript utility functions
 try {
   require('../backend/node_modules/ts-node').register({
     transpileOnly: true,
     compilerOptions: { module: 'commonjs' }
   });
 } catch {
-  // If already registered or handled
 }
 
 const http = require('http');
@@ -68,12 +66,8 @@ async function run() {
 
   let allPassed = true;
 
-  // --------------------------------------------------------------------------
-  // 1. UNIT TESTS: isPrivateIp() & DNS Resolution Branch Mocking
-  // --------------------------------------------------------------------------
   console.log('--- Step 1: Unit Tests for isPrivateIp() ---');
   const ipTestCases = [
-    // IPv4 Private & Reserved (Must be TRUE)
     { ip: '10.0.0.1', expected: true, label: '10.0.0.0/8 private network' },
     { ip: '10.255.255.254', expected: true, label: '10.0.0.0/8 upper bound' },
     { ip: '172.16.0.1', expected: true, label: '172.16.0.0/12 lower bound' },
@@ -86,7 +80,6 @@ async function run() {
     { ip: '100.127.255.254', expected: true, label: '100.64.0.0/10 upper bound' },
     { ip: '0.0.0.0', expected: true, label: '0.0.0.0/8 current network' },
 
-    // IPv6 Private & Reserved (Must be TRUE)
     { ip: '::1', expected: true, label: 'IPv6 loopback ::1' },
     { ip: '::', expected: true, label: 'IPv6 unspecified ::' },
     { ip: 'fe80::1', expected: true, label: 'IPv6 link-local fe80::' },
@@ -95,7 +88,6 @@ async function run() {
     { ip: '::ffff:127.0.0.1', expected: true, label: 'IPv4-mapped IPv6 loopback' },
     { ip: '::ffff:10.0.0.1', expected: true, label: 'IPv4-mapped IPv6 private' },
 
-    // Public IPs (Must be FALSE)
     { ip: '8.8.8.8', expected: false, label: 'Google Public DNS 8.8.8.8' },
     { ip: '1.1.1.1', expected: false, label: 'Cloudflare Public DNS 1.1.1.1' },
     { ip: '88.222.243.43', expected: false, label: 'gpcamerarental.com host IP' }
@@ -114,7 +106,6 @@ async function run() {
     console.log(`✅ PASS: All ${ipTestCases.length} IP test cases correctly classified!`);
   }
 
-  // DNS-resolution branch unit test with mock lookup (simulating DNS rebinding to 127.0.0.1)
   console.log('\n--- Step 1b: Unit Test for DNS Rebinding Defense (Mock DNS Lookup) ---');
   const mockRebindingLookup = async () => [{ address: '127.0.0.1', family: 4 }];
   const rebindingCheck = await validateDns('gpcamerarental.com', mockRebindingLookup);
@@ -136,9 +127,6 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // 2. URL PARSER & BYPASS RESISTANCE TESTS (Expected 403 or 400)
-  // --------------------------------------------------------------------------
   console.log('\n--- Step 2: URL Bypass Resistance Tests (Must return 403 / 400) ---');
   const bypassUrls = [
     { url: 'https://evilgpcamerarental.com/pic.jpg', expected: 403, label: 'Suffix prefix domain (evilgpcamerarental.com)' },
@@ -162,9 +150,6 @@ async function run() {
     }
   }
 
-  // --------------------------------------------------------------------------
-  // 3. DATABASE IMAGE HOSTNAME AUDIT
-  // --------------------------------------------------------------------------
   console.log('\n--- Step 3: Database Product Images Hostname Audit ---');
   const products = await prisma.product.findMany({ select: { images: true } });
   const hostnames = new Set();
@@ -183,9 +168,6 @@ async function run() {
     console.log('✅ PASS: Allowlist strictly pinned to required hostnames without wildcards.');
   }
 
-  // --------------------------------------------------------------------------
-  // 4. POSITIVE TEST: Live Allowed Image from gpcamerarental.com
-  // --------------------------------------------------------------------------
   console.log('\n--- Step 4: Positive Test: Real Allowed Image Retrieval ---');
   const realImageUrl = 'https://gpcamerarental.com/wp-content/uploads/2021/06/Icon0.png';
   const posRes = await testProxy(realImageUrl);
@@ -201,11 +183,7 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // 5. STREAMING 5MB CUTOFF TEST (CHUNKED 6MB -> 413)
-  // --------------------------------------------------------------------------
   console.log('\n--- Step 5: Streaming Byte-Limit Cutoff Test (Chunked 6MB -> 413) ---');
-  // Create an async iterable stream yielding six 1MB chunks (total 6MB)
   function createChunkedStream(chunksCount, chunkSize) {
     return (async function* () {
       for (let i = 0; i < chunksCount; i++) {
@@ -217,7 +195,7 @@ async function run() {
   const abortCtrl = new AbortController();
   let caughtTooLarge = false;
   try {
-    const stream6MB = createChunkedStream(6, 1024 * 1024); // 6 x 1MB = 6MB
+    const stream6MB = createChunkedStream(6, 1024 * 1024);
     await streamImageWithLimit(stream6MB, abortCtrl, 5 * 1024 * 1024);
   } catch (err) {
     if (err instanceof PayloadTooLargeError || err.code === 'PAYLOAD_TOO_LARGE') {
@@ -235,9 +213,6 @@ async function run() {
     allPassed = false;
   }
 
-  // --------------------------------------------------------------------------
-  // 6. HTTPS ENFORCEMENT & RATE LIMITING TEST
-  // --------------------------------------------------------------------------
   console.log('\n--- Step 6: HTTPS Protocol Enforcement & Rate Limiting ---');
   const httpRes = await testProxy('http://gpcamerarental.com/wp-content/uploads/2021/06/Icon0.png');
   console.log('Testing plain HTTP URL -> Status:', httpRes.status, '| Error:', httpRes.body?.error);

@@ -52,7 +52,6 @@ export const useCartStore = create<CartState>((set, get) => ({
   grandTotal: 0,
 
   fetchCart: async () => {
-    // If user is not logged in, avoid calling endpoint
     const token = localStorage.getItem('cinerent_token');
     if (!token) return;
 
@@ -60,10 +59,9 @@ export const useCartStore = create<CartState>((set, get) => ({
     try {
       const items: CartItem[] = await apiRequest('/cart');
       
-      // Compute summary totals from active items
       const rentalTotal = items.reduce((sum, item) => sum + item.rentalCost, 0);
       const depositTotal = items.reduce((sum, item) => sum + item.depositCost, 0);
-      const taxTotal = rentalTotal * 0.18; // 18% tax
+      const taxTotal = rentalTotal * 0.18;
       const grandTotal = rentalTotal + depositTotal + taxTotal;
 
       set({

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Camera, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
@@ -9,6 +9,7 @@ export default function Login() {
   const [localError, setLocalError] = useState('');
   const { login, loading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,35 +23,34 @@ export default function Login() {
 
     try {
       await login(email, password);
-      // Wait for store to update, then navigate based on role
       const user = useAuthStore.getState().user;
-      if (user?.role === 'ADMIN') {
+      const redirect = searchParams.get('redirect');
+      if (redirect) {
+        navigate(redirect);
+      } else if (user?.role === 'ADMIN') {
         navigate('/admin');
       } else {
         navigate('/');
       }
-    } catch (err: any) {
-      // Handled by store, error is set in Zustand state
+    } catch {
     }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 gradient-bg">
-      <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-        {/* Header */}
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-8 gradient-bg">
+      <div className="w-full max-w-md bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-100">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 mx-auto mb-4">
             <Camera className="w-6 h-6 text-white" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white font-sans">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 font-sans">
             Welcome back to CameraRent
           </h2>
-          <p className="text-sm text-slate-400 mt-2">
+          <p className="text-xs sm:text-sm text-slate-500 mt-2">
             Sign in to book camera gear & manage rentals
           </p>
         </div>
 
-        {/* Errors */}
         {(localError || error) && (
           <div className="mb-6 bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-start gap-3 text-sm text-red-400">
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -58,7 +58,6 @@ export default function Login() {
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-semibold text-dark-muted uppercase tracking-wider mb-2">
@@ -97,7 +96,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-xs text-slate-400">
           Don't have an account?{' '}
           <Link to="/signup" className="text-brand-600 hover:text-brand-700 font-bold hover:underline">
@@ -105,7 +103,6 @@ export default function Login() {
           </Link>
         </div>
 
-        {/* Pre-fill credentials helper for ease of demo */}
         <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 space-y-1">
           <p className="font-bold text-xs text-slate-700">Demo Accounts Available:</p>
           <div className="flex justify-between">

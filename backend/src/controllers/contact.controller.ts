@@ -7,8 +7,8 @@ import path from 'path';
 import rateLimit from 'express-rate-limit';
 
 const contactLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 contact submissions per window
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: { error: 'Too many contact messages sent, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -27,7 +27,6 @@ function sanitizeHtml(str: string): string {
 
 const router = Router();
 
-// Endpoint: Submit contact message (Public)
 router.post('/', contactLimiter, async (req: Request, res: Response) => {
   const { name, email, subject, message } = req.body;
 
@@ -46,7 +45,6 @@ router.post('/', contactLimiter, async (req: Request, res: Response) => {
   const cleanMessage = sanitizeHtml(message);
 
   try {
-    // 1. Save to SQLite database
     const contact = await prisma.contactMessage.create({
       data: { 
         name: cleanName, 
@@ -56,7 +54,6 @@ router.post('/', contactLimiter, async (req: Request, res: Response) => {
       },
     });
 
-    // 2. Build the styled HTML email template
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -135,7 +132,6 @@ router.post('/', contactLimiter, async (req: Request, res: Response) => {
 </body>
 </html>`;
 
-    // 3. Save a copy of the styled email locally for immediate review/preview
     const previewsDir = path.join(__dirname, '../../sent-emails');
     if (!fs.existsSync(previewsDir)) {
       fs.mkdirSync(previewsDir, { recursive: true });
@@ -145,7 +141,6 @@ router.post('/', contactLimiter, async (req: Request, res: Response) => {
     fs.writeFileSync(previewPath, htmlContent, 'utf8');
     console.log(`[Email Simulator] Styled HTML email written to: ${previewPath}`);
 
-    // 4. Send via Nodemailer (with Ethereal dynamic test account fallback for live browser links)
     let etherealUrl = '';
     try {
       const testAccount = await nodemailer.createTestAccount();
@@ -185,7 +180,6 @@ router.post('/', contactLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Fetch all contact messages (Admin Only)
 router.get(
   '/',
   authMiddleware,

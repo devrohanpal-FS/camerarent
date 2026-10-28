@@ -1,18 +1,13 @@
 import { Buffer } from 'buffer';
 
-/**
- * Sends a WhatsApp message using the Twilio API.
- * If credentials are not present in the .env, it runs in simulated mode.
- */
 export async function sendWhatsAppMessage(
   to: string,
   message: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM || '+14155238886'; // Default Twilio Sandbox Number
+  const from = process.env.TWILIO_WHATSAPP_FROM || '+14155238886';
 
-  // Format to number: keep digits and plus prefix
   let cleanTo = to.replace(/[^0-9+]/g, '');
   if (!cleanTo.startsWith('+')) {
     if (cleanTo.length === 10) {

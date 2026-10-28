@@ -10,10 +10,8 @@ import {
 
 const router = Router();
 
-// Apply auth middleware to all cart endpoints
 router.use(authMiddleware);
 
-// Get Cart Items
 router.get('/', async (req: Request, res: Response) => {
   const userId = req.user!.id;
 
@@ -30,16 +28,13 @@ router.get('/', async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Verify availability dynamically (in case of new bookings since adding to cart)
     const itemsWithAvailability = await Promise.all(
       items.map(async (item) => {
         const check = await checkProductAvailability(item.productId, item.startDate, item.endDate, item.quantity);
         
-        // Calculate rental duration in days
         const diffTime = Math.max(0, item.endDate.getTime() - item.startDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive of start & end day
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-        // Calculate rental price based on daily/weekly rates
         let totalCost = 0;
         
         if (diffDays >= 7) {
@@ -72,11 +67,9 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Add Item to Cart (Strict Zod validation on quantity, dates, and stock)
 router.post('/', async (req: Request, res: Response) => {
   const userId = req.user!.id;
 
-  // 1. Validate request payload using Zod schema
   const parseResult = addToCartSchema.safeParse(req.body);
   if (!parseResult.success) {
     const firstIssue = parseResult.error.issues[0];
@@ -88,7 +81,6 @@ router.post('/', async (req: Request, res: Response) => {
 
   const { productId, startDate, endDate, quantity } = parseResult.data;
 
-  // 2. Validate rental dates (no past dates, end >= start, duration <= 30 days)
   const dateCheck = validateRentalDates(startDate, endDate);
   if (!dateCheck.valid || !dateCheck.startDate || !dateCheck.endDate) {
     return res.status(400).json({ error: dateCheck.error || 'Invalid rental dates' });
@@ -98,7 +90,6 @@ router.post('/', async (req: Request, res: Response) => {
   const end = dateCheck.endDate;
 
   try {
-    // 3. Verify product exists and has stock
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
@@ -108,7 +99,6 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Product is currently out of stock' });
     }
 
-    // 4. Check if identical item is already in cart for same dates
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         userId,
@@ -120,7 +110,6 @@ router.post('/', async (req: Request, res: Response) => {
 
     const combinedQty = existingItem ? existingItem.quantity + quantity : quantity;
 
-    // 5. Enforce max cap of 10 units per equipment item
     if (combinedQty > 10) {
       return res.status(400).json({
         error: 'Quantity Limit Exceeded',
@@ -130,7 +119,6 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // 6. Enforce product total warehouse stock limit
     if (combinedQty > product.totalStock) {
       return res.status(400).json({
         error: 'Stock Limit Exceeded',
@@ -138,7 +126,6 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // 7. Verify inventory availability against booked orders
     const check = await checkProductAvailability(productId, start, end, combinedQty);
     if (!check.available) {
       return res.status(400).json({ error: check.reason });
@@ -169,11 +156,9 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Update Cart Item (Dates or Quantity)
 router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // 1. Validate request payload using Zod schema
   const parseResult = updateCartSchema.safeParse(req.body);
   if (!parseResult.success) {
     const firstIssue = parseResult.error.issues[0];
@@ -198,7 +183,6 @@ router.put('/:id', async (req: Request, res: Response) => {
     const startInput = startDate || cartItem.startDate;
     const endInput = endDate || cartItem.endDate;
 
-    // Validate dates
     const dateCheck = validateRentalDates(startInput, endInput);
     if (!dateCheck.valid || !dateCheck.startDate || !dateCheck.endDate) {
       return res.status(400).json({ error: dateCheck.error || 'Invalid rental dates' });
@@ -208,7 +192,6 @@ router.put('/:id', async (req: Request, res: Response) => {
     const end = dateCheck.endDate;
     const qty = quantity !== undefined ? quantity : cartItem.quantity;
 
-    // Validate stock cap
     if (qty > cartItem.product.totalStock) {
       return res.status(400).json({
         error: 'Stock Limit Exceeded',
@@ -216,7 +199,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    // Verify availability
     const check = await checkProductAvailability(cartItem.productId, start, end, qty);
     if (!check.available) {
       return res.status(400).json({ error: check.reason });
@@ -238,7 +220,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Delete Cart Item
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -257,7 +238,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Clear Cart
 router.delete('/', async (req: Request, res: Response) => {
   const userId = req.user!.id;
 

@@ -6,7 +6,6 @@ import path from 'path';
 
 const router = Router();
 
-// GET all CMS configuration keys formatted as a single nested object
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const contents = await prisma.cmsContent.findMany();
@@ -24,7 +23,6 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-// GET single CMS config key
 router.get('/:key', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { key } = req.params;
@@ -44,7 +42,6 @@ router.get('/:key', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-// PUT update/create CMS key value (Admin Only)
 router.put('/:key', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { key } = req.params;
@@ -72,7 +69,6 @@ router.put('/:key', authMiddleware, requireRole(['ADMIN']), async (req: Request,
   }
 });
 
-// POST base64 upload image (Admin Only)
 router.post('/upload', authMiddleware, requireRole(['ADMIN']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, type, base64 } = req.body;
@@ -81,7 +77,6 @@ router.post('/upload', authMiddleware, requireRole(['ADMIN']), async (req: Reque
       return res.status(400).json({ error: 'Filename (name) and base64 string are required.' });
     }
 
-    // Strip out base64 prefixes if present (e.g. data:image/png;base64,)
     const base64Data = base64.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
 
@@ -90,7 +85,6 @@ router.post('/upload', authMiddleware, requireRole(['ADMIN']), async (req: Reque
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    // Append timestamp to prevent caching / file conflicts
     const ext = path.extname(name) || '.png';
     const baseName = path.basename(name, ext).replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `${baseName}_${Date.now()}${ext}`;

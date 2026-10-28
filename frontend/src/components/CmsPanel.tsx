@@ -1,23 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useCmsStore } from '../store/cmsStore';
 import { 
-  Plus, Trash2, Edit, Save, Upload, Eye, BookOpen, Heart, List, 
-  Image as ImageIcon, Tag, Globe, Building, Check, Loader2, Star, ArrowUpRight
+  Plus, Trash2, Save, Upload, Eye, BookOpen, Heart, List, 
+  Image as ImageIcon, Tag, Globe, Check, Loader2, Star
 } from 'lucide-react';
 
 export default function CmsPanel() {
-  const { contents, fetchCms, updateCms, uploadImage, loading } = useCmsStore();
+  const { contents, fetchCms, updateCms, uploadImage } = useCmsStore();
   const [activeSubTab, setActiveSubTab] = useState<'landing' | 'about' | 'services' | 'portfolio' | 'team_testimonials' | 'faqs_menus' | 'seo_company'>('landing');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [uploadingField, setUploadingField] = useState<string | null>(null);
 
-  // Local form states for each section
   const [homeHero, setHomeHero] = useState<any>({ sparkText: '', titleLine1: '', titleLine2: '', description: '' });
   const [homeCta, setHomeCta] = useState<any>({ badge: '', title: '', description: '', buttonText: '', link: '' });
   const [aboutPage, setAboutPage] = useState<any>({ title: '', subtitle: '', description: '', content: '', bannerUrl: '' });
   
-  // Lists states
   const [services, setServices] = useState<any[]>([]);
   const [portfolio, setPortfolio] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
@@ -25,14 +23,11 @@ export default function CmsPanel() {
   const [faqs, setFaqs] = useState<any[]>([]);
   const [clientLogos, setClientLogos] = useState<any[]>([]);
   
-  // Settings states
   const [company, setCompany] = useState<any>({ name: '', phone: '', email: '', address: '', city: '' });
   const [socials, setSocials] = useState<any>({ facebook: '', twitter: '', instagram: '', youtube: '', linkedin: '' });
   const [seo, setSeo] = useState<any>({ metaTitle: '', metaDescription: '', ogTitle: '', ogDescription: '', ogImage: '', ogUrl: '' });
   const [navMenu, setNavMenu] = useState<any[]>([]);
-  const [footer, setFooter] = useState<any>({ description: '', copyright: '', links: [] });
 
-  // Add/Edit list item buffers
   const [newService, setNewService] = useState({ name: '', description: '', iconName: 'ShieldCheck' });
   const [newPortfolio, setNewPortfolio] = useState({ title: '', category: 'Short Film', description: '', imageUrl: '' });
   const [newTestimonial, setNewTestimonial] = useState({ name: '', role: '', comment: '', rating: 5 });
@@ -45,7 +40,6 @@ export default function CmsPanel() {
     fetchCms();
   }, [fetchCms]);
 
-  // Sync state from store to local forms
   useEffect(() => {
     if (contents.home_hero) setHomeHero(contents.home_hero);
     if (contents.home_cta) setHomeCta(contents.home_cta);
@@ -60,7 +54,6 @@ export default function CmsPanel() {
     if (contents.social_links) setSocials(contents.social_links);
     if (contents.seo_metadata) setSeo(contents.seo_metadata);
     if (contents.navigation_menu) setNavMenu(contents.navigation_menu);
-    if (contents.footer_content) setFooter(contents.footer_content);
   }, [contents]);
 
   const triggerNotification = (msg: string, isError = false) => {
@@ -73,7 +66,6 @@ export default function CmsPanel() {
     }
   };
 
-  // Generic Save for simple key-value blocks
   const handleSaveConfig = async (key: string, value: any) => {
     try {
       await updateCms(key, value);
@@ -83,7 +75,6 @@ export default function CmsPanel() {
     }
   };
 
-  // Image Upload helper
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: string, onUploadSuccess: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -105,7 +96,6 @@ export default function CmsPanel() {
     reader.readAsDataURL(file);
   };
 
-  // Formatted editor helper component
   const TextareaEditor = ({ value, onChange, label, id }: { value: string; onChange: (v: string) => void; label: string; id: string }) => {
     const insertTag = (tagOpen: string, tagClose: string) => {
       const textarea = document.getElementById(id) as HTMLTextAreaElement;
@@ -145,7 +135,6 @@ export default function CmsPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Notifications */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 animate-fade-in">
           <Check className="w-4 h-4 shrink-0" /> {successMsg}
@@ -157,7 +146,6 @@ export default function CmsPanel() {
         </div>
       )}
 
-      {/* Sub Tabs */}
       <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto whitespace-nowrap gap-1">
         {[
           { id: 'landing', label: 'Home Sections', icon: ImageIcon },
@@ -188,10 +176,8 @@ export default function CmsPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* LEFT COLUMN: EDITING FORM */}
         <div className="lg:col-span-7 bg-white border border-slate-100 p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
           
-          {/* TAB 1: LANDING HERO & CTA */}
           {activeSubTab === 'landing' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -300,7 +286,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 2: ABOUT US DETAILS */}
           {activeSubTab === 'about' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -360,7 +345,6 @@ export default function CmsPanel() {
                   />
                 </div>
 
-                {/* Custom Rich Text Editor */}
                 <TextareaEditor
                   id="about-content"
                   label="Rich Text About Narrative Content"
@@ -378,7 +362,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 3: SERVICES */}
           {activeSubTab === 'services' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -386,7 +369,6 @@ export default function CmsPanel() {
                 <p className="text-[10px] text-slate-400">Manage vetted services cards with custom titles and descriptions.</p>
               </div>
 
-              {/* Add form */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 text-xs">
                 <h4 className="font-bold text-xs text-slate-800">Add New Service</h4>
                 <div className="grid grid-cols-2 gap-4">
@@ -437,7 +419,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* List */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Services</label>
                 <div className="divide-y divide-slate-100 bg-slate-50 border border-slate-100 rounded-2xl overflow-hidden">
@@ -464,7 +445,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 4: PORTFOLIO */}
           {activeSubTab === 'portfolio' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -472,7 +452,6 @@ export default function CmsPanel() {
                 <p className="text-[10px] text-slate-400">Featured projects and cinematic productions.</p>
               </div>
 
-              {/* Add form */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 text-xs">
                 <h4 className="font-bold text-xs text-slate-800">Add New Case Study</h4>
                 <div className="grid grid-cols-2 gap-4">
@@ -539,7 +518,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* List */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Portfolio Items</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -567,7 +545,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 5: TEAM & TESTIMONIALS */}
           {activeSubTab === 'team_testimonials' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -575,7 +552,6 @@ export default function CmsPanel() {
                 <p className="text-[10px] text-slate-400">Manage client reviews and ratings displayed on the home page.</p>
               </div>
 
-              {/* Testimonial Form */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 text-xs">
                 <h4 className="font-bold text-xs text-slate-800">Add Testimonial</h4>
                 <div className="grid grid-cols-2 gap-4">
@@ -622,7 +598,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* Team Members List */}
               <div className="border-b border-slate-150 pb-4 pt-6 border-t border-slate-100">
                 <h3 className="font-extrabold text-base text-slate-800">Team Members Profile</h3>
                 <p className="text-[10px] text-slate-400">Co-founders and management crew profiles.</p>
@@ -685,7 +660,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* Logos upload section */}
               <div className="border-b border-slate-150 pb-4 pt-6 border-t border-slate-100">
                 <h3 className="font-extrabold text-base text-slate-800">Clients Brand Logos</h3>
                 <p className="text-[10px] text-slate-400">Cooperating studios and agency logos.</p>
@@ -739,7 +713,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 6: FAQS & MENUS */}
           {activeSubTab === 'faqs_menus' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -747,7 +720,6 @@ export default function CmsPanel() {
                 <p className="text-[10px] text-slate-400">Manage questions and answers displayed in Help FAQ section.</p>
               </div>
 
-              {/* Add FAQ form */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 text-xs">
                 <h4 className="font-bold text-xs text-slate-800">Add FAQ Item</h4>
                 <div>
@@ -781,7 +753,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* Navigation list */}
               <div className="border-b border-slate-150 pb-4 pt-6 border-t border-slate-100">
                 <h3 className="font-extrabold text-base text-slate-800">Navigation Menu Items</h3>
                 <p className="text-[10px] text-slate-400">Routes and labels mapped in top header navigation.</p>
@@ -826,7 +797,6 @@ export default function CmsPanel() {
             </div>
           )}
 
-          {/* TAB 7: SEO & COMPANY METRICS */}
           {activeSubTab === 'seo_company' && (
             <div className="space-y-6">
               <div className="border-b border-slate-150 pb-4">
@@ -892,7 +862,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* Company Info */}
               <div className="border-b border-slate-150 pb-4 pt-6 border-t border-slate-100">
                 <h3 className="font-extrabold text-base text-slate-800">Company & Social Directory</h3>
                 <p className="text-[10px] text-slate-400">General contacts coordinates.</p>
@@ -956,7 +925,6 @@ export default function CmsPanel() {
                 </button>
               </div>
 
-              {/* Social Links */}
               <div className="border-b border-slate-150 pb-4 pt-6 border-t border-slate-100">
                 <h3 className="font-extrabold text-base text-slate-800">Social Media Coordinates</h3>
               </div>
@@ -994,7 +962,6 @@ export default function CmsPanel() {
 
         </div>
 
-        {/* RIGHT COLUMN: LIVE SIMULATED PREVIEW */}
         <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
           <div className="border-b border-slate-150 pb-3 flex justify-between items-center">
             <h3 className="font-extrabold text-xs text-slate-900 uppercase tracking-widest flex items-center gap-1.5">
@@ -1004,7 +971,6 @@ export default function CmsPanel() {
           </div>
 
           <div className="bg-slate-950 text-white rounded-3xl overflow-hidden shadow-2xl border border-slate-800 min-h-[300px] flex flex-col justify-between">
-            {/* Mock Landing */}
             {activeSubTab === 'landing' && (
               <div className="p-6 md:p-8 space-y-6 flex-1 flex flex-col justify-center text-center items-center bg-gradient-to-br from-slate-900 via-slate-850 to-indigo-950">
                 <span className="bg-brand-500/20 text-brand-300 text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -1025,7 +991,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock About Page */}
             {activeSubTab === 'about' && (
               <div className="flex-1 flex flex-col bg-slate-900">
                 <div className="h-28 bg-slate-800 relative flex items-center justify-center text-center">
@@ -1040,7 +1005,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock Services */}
             {activeSubTab === 'services' && (
               <div className="p-6 space-y-4 flex-1 bg-slate-900">
                 <p className="text-[8px] font-black text-brand-400 uppercase tracking-widest text-center">SERVICES PREVIEW</p>
@@ -1055,7 +1019,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock Portfolio */}
             {activeSubTab === 'portfolio' && (
               <div className="p-5 space-y-4 flex-1 bg-slate-900">
                 <p className="text-[8px] font-black text-brand-400 uppercase tracking-widest text-center">PORTFOLIO CASE STUDY</p>
@@ -1074,7 +1037,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock Team & Testimonials */}
             {activeSubTab === 'team_testimonials' && (
               <div className="p-5 space-y-4 flex-1 bg-slate-900 justify-center flex flex-col">
                 <p className="text-[8px] font-black text-brand-400 uppercase tracking-widest text-center">TESTIMONIAL PREVIEW</p>
@@ -1095,7 +1057,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock FAQs */}
             {activeSubTab === 'faqs_menus' && (
               <div className="p-5 space-y-3 flex-1 bg-slate-900 flex flex-col justify-center">
                 <p className="text-[8px] font-black text-brand-400 uppercase tracking-widest text-center">FAQ PREVIEW</p>
@@ -1108,7 +1069,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock Contacts */}
             {activeSubTab === 'seo_company' && (
               <div className="p-5 space-y-4 flex-1 bg-slate-900 flex flex-col justify-center">
                 <p className="text-[8px] font-black text-brand-400 uppercase tracking-widest text-center">COMPANY HEADLINES</p>
@@ -1121,7 +1081,6 @@ export default function CmsPanel() {
               </div>
             )}
 
-            {/* Mock Footer Brand Bar */}
             <div className="bg-slate-950 border-t border-slate-900 px-5 py-3.5 flex justify-between items-center text-[8px] text-slate-500 shrink-0">
               <span>{company.name || 'CameraRent'} Mock Footer</span>
               <span className="flex gap-2">

@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  BarChart3, Package, Users, ShieldAlert, BadgeDollarSign, RefreshCw,
-  Layers, Calendar, ClipboardCheck, Ban, Sparkles, Trash2, Edit2,
-  MessageSquare, UserPlus, X, Send, PhoneCall, Eye, FileText, ExternalLink
+  BarChart3, Package, Users, RefreshCw,
+  Layers, Calendar, ClipboardCheck, Ban, Trash2, Edit2,
+  MessageSquare, UserPlus, X, Send, Eye, ExternalLink,
+  Upload, Plus, Image as ImageIcon, Loader2, Star
 } from 'lucide-react';
-import { apiRequest } from '../utils/api';
+import {
+  apiRequest,
+  getProductImageUrl,
+  parseProductImages,
+  resolveSingleImageUrl,
+} from '../utils/api';
 import CmsPanel from '../components/CmsPanel';
+import CrewManager from '../components/CrewManager';
+import ProductSpecsEditor, {
+  parseProductSpecsData,
+  serializeProductSpecsData,
+  getDefaultTechSpecs,
+  getDefaultBoxItems,
+  type TechSpecItem,
+  type BoxItem,
+} from '../components/ProductSpecsEditor';
 
 interface StatBlock {
   totalOrdersCount: number;
@@ -18,7 +32,6 @@ interface StatBlock {
 }
 
 export default function AdminDashboard() {
-  const navigate = useNavigate();
   const [stats, setStats] = useState<StatBlock | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [cancellations, setCancellations] = useState<any[]>([]);
@@ -27,19 +40,34 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [contactMessages, setContactMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'orders' | 'cancellations' | 'kyc' | 'products' | 'users' | 'inquiries' | 'cms'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'cancellations' | 'kyc' | 'products' | 'crew' | 'users' | 'inquiries' | 'cms'>('orders');
+  const [crewCount, setCrewCount] = useState<number>(9);
 
-  // KYC pending users
   const [pendingKycUsers, setPendingKycUsers] = useState<any[]>([]);
 
-  // Modals & Active Edit States
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [whatsappOrder, setWhatsappOrder] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedOrderLoading, setSelectedOrderLoading] = useState(false);
+  const [proofPreviewUrl, setPosProofPreviewUrl] = useState<string | null>(null);
 
-  // User Add Form State
+  const [newTechSpecs, setNewTechSpecs] = useState<TechSpecItem[]>(getDefaultTechSpecs('Cameras'));
+  const [newBoxItems, setNewBoxItems] = useState<BoxItem[]>(getDefaultBoxItems('New Equipment'));
+  const [editTechSpecs, setEditTechSpecs] = useState<TechSpecItem[]>([]);
+  const [editBoxItems, setEditBoxItems] = useState<BoxItem[]>([]);
+
+  const handleStartEditProduct = (p: any) => {
+    setEditingProduct(p);
+    const { techSpecs, boxItems } = parseProductSpecsData(p.specs);
+    setEditTechSpecs(
+      techSpecs.length > 0 ? techSpecs : getDefaultTechSpecs(getCategoryName(p.categoryId) || 'Cameras')
+    );
+    setEditBoxItems(
+      boxItems.length > 0 ? boxItems : getDefaultBoxItems(p.name)
+    );
+  };
+
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
@@ -48,7 +76,6 @@ export default function AdminDashboard() {
     role: 'CUSTOMER',
   });
 
-  // Product Add Form State
   const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
@@ -63,7 +90,6 @@ export default function AdminDashboard() {
     totalStock: '1',
   });
 
-  // Blackout Date Form State
   const [blackoutForm, setBlackoutForm] = useState({
     productId: '',
     startDate: '',
@@ -71,12 +97,8 @@ export default function AdminDashboard() {
     reason: '',
   });
 
-  // WhatsApp form state
   const [waPhone, setWaPhone] = useState('');
   const [waMessage, setWaMessage] = useState('');
-
-  // Vendors list for product assignation
-  const [vendors, setVendors] = useState<any[]>([]);
 
   useEffect(() => {
     loadAdminData();
@@ -85,26 +107,50 @@ export default function AdminDashboard() {
   async function loadAdminData() {
     setLoading(true);
     try {
-      const statsData = await apiRequest('/orders/admin/dashboard');
-      setStats(statsData.stats);
+      const [
+        statsRes,
+        ordersRes,
+        cancelRes,
+        prodRes,
+        catRes,
+        usersRes,
+        contactsRes,
+        crewRes,
+      ] = await Promise.allSettled([
+        apiRequest('/orders/admin/dashboard'),
+        apiRequest('/orders'),
+        apiRequest('/orders/admin/cancellations'),
+        apiRequest('/products'),
+        apiRequest('/products/categories'),
+        apiRequest('/auth/admin/users'),
+        apiRequest('/contacts'),
+        apiRequest('/crew'),
+      ]);
 
-      const ordersData = await apiRequest('/orders');
+      if (statsRes.status === 'fulfilled' && statsRes.value?.stats) {
+        setStats(statsRes.value.stats);
+      }
+      const ordersData = ordersRes.status === 'fulfilled' ? ordersRes.value : [];
       setOrders(ordersData);
 
-      const cancelData = await apiRequest('/orders/admin/cancellations');
+      const cancelData = cancelRes.status === 'fulfilled' ? cancelRes.value : [];
       setCancellations(cancelData);
 
-      const prodData = await apiRequest('/products');
+      const prodData = prodRes.status === 'fulfilled' ? prodRes.value : [];
       setProducts(prodData);
 
-      const catData = await apiRequest('/products/categories');
+      const catData = catRes.status === 'fulfilled' ? catRes.value : [];
       setCategories(catData);
 
-      const usersData = await apiRequest('/auth/admin/users');
+      const usersData = usersRes.status === 'fulfilled' ? usersRes.value : [];
       setUsers(usersData);
 
-      const contactsData = await apiRequest('/contacts');
+      const contactsData = contactsRes.status === 'fulfilled' ? contactsRes.value : [];
       setContactMessages(contactsData);
+
+      if (crewRes.status === 'fulfilled' && Array.isArray(crewRes.value)) {
+        setCrewCount(crewRes.value.length);
+      }
 
       if (catData.length > 0) {
         setNewProduct(prev => ({ ...prev, categoryId: catData[0].id }));
@@ -114,9 +160,8 @@ export default function AdminDashboard() {
       setPendingKycUsers(pendingKyc);
 
       const uniqueVendors = Array.from(
-        new Map(prodData.map((p: any) => [p.vendor.id, p.vendor])).values()
+        new Map(prodData.filter((p: any) => p?.vendor?.id).map((p: any) => [p.vendor.id, p.vendor])).values()
       ) as any[];
-      setVendors(uniqueVendors);
       if (uniqueVendors.length > 0) {
         setNewProduct(prev => ({ ...prev, vendorId: uniqueVendors[0].id }));
       }
@@ -133,7 +178,6 @@ export default function AdminDashboard() {
     return found ? found.name : '';
   };
 
-  // 1. User management calls
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -172,8 +216,7 @@ export default function AdminDashboard() {
       alert(`KYC request successfully ${action.toLowerCase()}d.`);
       loadAdminData();
     } catch (err: any) {
-      alert(`KYC Status updated to ${action}`);
-      loadAdminData();
+      alert(`KYC update failed: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -197,7 +240,6 @@ export default function AdminDashboard() {
         body: JSON.stringify({ status: newStatus }),
       });
 
-      // Keep selected order modal state in sync if open
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder({ ...selectedOrder, status: newStatus });
       }
@@ -209,10 +251,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: 'PAID' | 'FAILED') => {
+    try {
+      await apiRequest(`/orders/${orderId}/payment`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paymentStatus }),
+      });
+
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, paymentStatus });
+      }
+
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Failed to update payment status: ${err.message}`);
+    }
+  };
+
   const handleViewOrderDetails = async (orderId: string) => {
     setSelectedOrderLoading(true);
     try {
-      // Use local order details if available and populated
       const existing = orders.find(o => o.id === orderId);
       if (existing && existing.items && existing.items.length > 0) {
         setSelectedOrder(existing);
@@ -241,14 +299,226 @@ export default function AdminDashboard() {
     }
   };
 
-  // 2. Product Mutation actions
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [newImageUrlInput, setNewImageUrlInput] = useState('');
+  const [editImageUrlInput, setEditImageUrlInput] = useState('');
+
+  const readFileAsDataUrl = (file: File): Promise<{ name: string; dataUrl: string }> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve({ name: file.name, dataUrl: reader.result });
+        } else {
+          reject(new Error('Failed to read file'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+
+  const handleUploadImageFiles = async (
+    fileList: FileList | null,
+    currentImagesStr: string,
+    onChangeImages: (nextImagesStr: string) => void
+  ) => {
+    if (!fileList || fileList.length === 0) return;
+
+    const existingList = parseProductImages(currentImagesStr);
+    setUploadingImages(true);
+
+    try {
+      const filesArray = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+      if (filesArray.length === 0) {
+        alert('Please select valid image files (JPG, PNG, WEBP, etc.).');
+        return;
+      }
+
+      const encodedFiles = await Promise.all(filesArray.map(readFileAsDataUrl));
+
+      let uploadedUrls: string[] = [];
+      try {
+        const res = await apiRequest('/products/upload-images', {
+          method: 'POST',
+          body: JSON.stringify({ files: encodedFiles }),
+        });
+        if (Array.isArray(res.urls) && res.urls.length > 0) {
+          uploadedUrls = res.urls;
+        }
+      } catch {
+        uploadedUrls = encodedFiles.map((f) => f.dataUrl);
+      }
+
+      const merged = [...existingList, ...uploadedUrls];
+      onChangeImages(JSON.stringify(merged));
+    } catch (err: any) {
+      alert(`Failed to upload images: ${err.message}`);
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const renderProductImagesManager = (
+    imagesStr: string,
+    onChangeImages: (nextImagesStr: string) => void,
+    urlInputValue: string,
+    setUrlInputValue: (val: string) => void,
+    inputIdPrefix: string
+  ) => {
+    const imageList = parseProductImages(imagesStr);
+
+    const handleRemoveImage = (indexToRemove: number) => {
+      const next = imageList.filter((_, idx) => idx !== indexToRemove);
+      onChangeImages(next.length > 0 ? JSON.stringify(next) : '');
+    };
+
+    const handleSetMainImage = (indexToPromote: number) => {
+      if (indexToPromote <= 0 || indexToPromote >= imageList.length) return;
+      const chosen = imageList[indexToPromote];
+      const rest = imageList.filter((_, idx) => idx !== indexToPromote);
+      onChangeImages(JSON.stringify([chosen, ...rest]));
+    };
+
+    const handleAddUrl = () => {
+      const trimmed = urlInputValue.trim();
+      if (!trimmed) return;
+      const next = [...imageList, trimmed];
+      onChangeImages(JSON.stringify(next));
+      setUrlInputValue('');
+    };
+
+    return (
+      <div className="space-y-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
+              Product Images ({imageList.length}) — Multiple Allowed
+            </label>
+            <p className="text-[10px] text-slate-400">
+              Upload one or multiple photos from your device or paste image URLs. The first image is the main cover.
+            </p>
+          </div>
+
+          <label
+            htmlFor={`${inputIdPrefix}-file-upload`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2a1872] hover:bg-[#1f1157] text-white font-bold text-[11px] cursor-pointer shadow-xs transition shrink-0"
+          >
+            {uploadingImages ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Uploading...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Images</span>
+              </>
+            )}
+            <input
+              id={`${inputIdPrefix}-file-upload`}
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploadingImages}
+              onChange={(e) => {
+                handleUploadImageFiles(e.target.files, imagesStr, onChangeImages);
+                e.target.value = '';
+              }}
+              className="sr-only"
+            />
+          </label>
+        </div>
+
+        {imageList.length > 0 ? (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
+            {imageList.map((img, idx) => (
+              <div
+                key={`${idx}-${img.slice(0, 24)}`}
+                className={`relative group rounded-xl bg-white border-2 p-1.5 flex flex-col items-center justify-between h-24 overflow-hidden ${idx === 0 ? 'border-purple-600' : 'border-slate-200'
+                  }`}
+              >
+                <img
+                  src={resolveSingleImageUrl(img)}
+                  alt={`Product view ${idx + 1}`}
+                  className="w-full h-14 object-contain rounded"
+                />
+
+                <div className="w-full flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+                  {idx === 0 ? (
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
+                      <Star className="w-2.5 h-2.5 fill-purple-700" /> Main
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSetMainImage(idx)}
+                      className="text-[9px] font-bold text-slate-600 hover:text-purple-700 underline cursor-pointer"
+                      title="Set as Main Cover Image"
+                    >
+                      Set Main
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    className="p-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600 cursor-pointer"
+                    title="Remove Image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-4 text-center bg-white rounded-xl border border-dashed border-slate-300 text-slate-400 text-[11px] flex flex-col items-center gap-1">
+            <ImageIcon className="w-5 h-5 text-slate-300" />
+            <span>No images selected yet. Click "Upload Images" or add an image URL below.</span>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <input
+            type="url"
+            value={urlInputValue}
+            onChange={(e) => setUrlInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddUrl();
+              }
+            }}
+            placeholder="Or paste an image URL (https://...) and click Add"
+            className="flex-1 bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-[11px] text-slate-700 focus:outline-none focus:border-purple-600"
+          />
+          <button
+            type="button"
+            onClick={handleAddUrl}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add URL
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsedImgs = parseProductImages(newProduct.images);
+    if (parsedImgs.length === 0) {
+      alert('Please upload at least one product image.');
+      return;
+    }
+    const serializedSpecs = serializeProductSpecsData(newTechSpecs, newBoxItems);
     try {
       await apiRequest('/products', {
         method: 'POST',
         body: JSON.stringify({
           ...newProduct,
+          specs: serializedSpecs,
+          images: JSON.stringify(parsedImgs),
           dailyRate: parseFloat(newProduct.dailyRate),
           weeklyRate: parseFloat(newProduct.weeklyRate),
           depositAmount: parseFloat(newProduct.depositAmount),
@@ -265,9 +535,12 @@ export default function AdminDashboard() {
         dailyRate: '',
         weeklyRate: '',
         depositAmount: '',
+        images: '',
         subcategory: '',
         totalStock: '1',
       }));
+      setNewTechSpecs(getDefaultTechSpecs());
+      setNewBoxItems(getDefaultBoxItems());
     } catch (err: any) {
       alert(`Failed to add product: ${err.message}`);
     }
@@ -276,13 +549,20 @@ export default function AdminDashboard() {
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
+    const parsedImgs = parseProductImages(editingProduct.images);
+    if (parsedImgs.length === 0) {
+      alert('Please keep or upload at least one product image.');
+      return;
+    }
+    const serializedSpecs = serializeProductSpecsData(editTechSpecs, editBoxItems);
     try {
       await apiRequest(`/products/${editingProduct.id}`, {
         method: 'PUT',
         body: JSON.stringify({
           name: editingProduct.name,
           description: editingProduct.description,
-          specs: editingProduct.specs,
+          specs: serializedSpecs,
+          images: JSON.stringify(parsedImgs),
           dailyRate: parseFloat(editingProduct.dailyRate),
           weeklyRate: parseFloat(editingProduct.weeklyRate),
           depositAmount: parseFloat(editingProduct.depositAmount),
@@ -335,7 +615,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 3. WhatsApp Click-to-Chat trigger
   const openWhatsappModal = (order: any) => {
     setWhatsappOrder(order);
     setWaPhone(order.user.phone || '+91');
@@ -372,7 +651,6 @@ export default function AdminDashboard() {
   return (
     <div className="py-6 px-4 max-w-7xl mx-auto space-y-8 bg-slate-50 min-h-screen text-slate-800">
 
-      {/* Title Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200/60">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 font-sans flex items-center gap-2.5">
@@ -388,7 +666,6 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {/* KPI Stats Grid */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
@@ -414,13 +691,13 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Tabs Menu */}
       <div className="flex border-b border-slate-200 overflow-x-auto whitespace-nowrap scrollbar-none gap-2">
         {[
           { id: 'orders', label: 'All Orders', count: orders.length },
           { id: 'cancellations', label: 'Cancellations', count: cancellations.length },
           { id: 'kyc', label: 'KYC Requests', count: pendingKycUsers.length },
           { id: 'products', label: 'Inventory & Setup', count: products.length },
+          { id: 'crew', label: 'Crew Members', count: crewCount },
           { id: 'users', label: 'Users Manager', count: users.length },
           { id: 'inquiries', label: 'User Inquiries', count: contactMessages.length },
           { id: 'cms', label: 'CMS Content Manager', count: 7 },
@@ -429,8 +706,8 @@ export default function AdminDashboard() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === tab.id
-                ? 'border-brand-600 text-brand-600'
-                : 'border-transparent text-slate-400 hover:text-slate-700'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
               }`}
           >
             {tab.label}
@@ -442,7 +719,6 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Tab Panels */}
       {loading ? (
         <div className="text-center py-12 text-slate-400 text-xs font-semibold">
           Loading administration metrics...
@@ -450,87 +726,155 @@ export default function AdminDashboard() {
       ) : (
         <div className="space-y-6">
 
-          {/* TAB 1: ORDERS */}
           {activeTab === 'orders' && (
             <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs min-w-[900px]">
+                <table className="w-full text-left border-collapse text-xs min-w-[1050px]">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
                       <th className="p-4 font-bold">Order Info</th>
                       <th className="p-4 font-bold">Customer</th>
                       <th className="p-4 font-bold">Rental Cost</th>
+                      <th className="p-4 font-bold">Payment & Verification</th>
                       <th className="p-4 font-bold">Address</th>
                       <th className="p-4 font-bold">Status & Action</th>
                       <th className="p-4 font-bold text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {orders.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-50/50">
-                        <td className="p-4">
-                          <button
-                            onClick={() => handleViewOrderDetails(o.id)}
-                            className="font-bold text-brand-600 hover:text-brand-700 hover:underline font-mono text-left cursor-pointer transition focus:outline-none"
-                          >
-                            {o.orderNumber}
-                          </button>
-                          <p className="text-[12px] text-slate-400 mt-0.5">Date: {new Date(o.createdAt).toLocaleDateString()}</p>
-                        </td>
-                        <td className="p-4">
-                          <p className="font-semibold text-slate-700">{o.user.name}</p>
-                          <p className="text-[12px] text-slate-400">{o.user.email}</p>
-                          {o.user.phone && <p className="text-[11px] text-slate-400 font-bold">{o.user.phone}</p>}
-                        </td>
-                        <td className="p-4">
-                          <p className="font-bold text-slate-800">₹{o.grandTotal.toFixed(2)}</p>
-                          <p className="text-[12px] text-brand-600 font-bold">Dep: ₹{o.totalDeposit.toFixed(2)}</p>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-slate-600 max-w-[200px] line-clamp-1">{o.deliveryAddress}</p>
-                        </td>
-                        <td className="p-4">
-                          <select
-                            value={o.status}
-                            onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                            className={`border border-slate-200 rounded-lg p-1.5 focus:outline-none text-[13px] font-bold ${getStatusColor(o.status)}`}
-                          >
-                            <option value="PLACED">PLACED</option>
-                            <option value="APPROVED">APPROVED</option>
-                            <option value="DISPATCHED">DISPATCHED</option>
-                            <option value="ACTIVE">ACTIVE</option>
-                            <option value="RETURNED">RETURNED</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="CANCELLED">CANCELLED</option>
-                          </select>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
+                    {orders.map((o) => {
+                      const payMethod = o.paymentMethod || 'COD';
+                      const payStatus = o.paymentStatus || 'PENDING';
+                      return (
+                        <tr key={o.id} className="hover:bg-slate-50/50">
+                          <td className="p-4">
                             <button
                               onClick={() => handleViewOrderDetails(o.id)}
-                              className="p-2 bg-brand-50 text-brand-600 hover:bg-brand-100 rounded-lg transition cursor-pointer"
-                              title="View Order Details"
+                              className="font-bold text-brand-600 hover:text-brand-700 hover:underline font-mono text-left cursor-pointer transition focus:outline-none"
                             >
-                              <Eye className="w-4 h-4" />
+                              {o.orderNumber}
                             </button>
-                            <button
-                              onClick={() => openWhatsappModal(o)}
-                              className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition cursor-pointer"
-                              title="Notify Customer on WhatsApp"
+                            <p className="text-[12px] text-slate-400 mt-0.5">Date: {new Date(o.createdAt).toLocaleDateString()}</p>
+                          </td>
+                          <td className="p-4">
+                            <p className="font-semibold text-slate-700">{o.user.name}</p>
+                            <p className="text-[12px] text-slate-400">{o.user.email}</p>
+                            {o.user.phone && <p className="text-[11px] text-slate-400 font-bold">{o.user.phone}</p>}
+                          </td>
+                          <td className="p-4">
+                            <p className="font-bold text-slate-800">₹{o.grandTotal.toFixed(2)}</p>
+                            <p className="text-[12px] text-brand-600 font-bold">Dep: ₹{o.totalDeposit.toFixed(2)}</p>
+                          </td>
+                          <td className="p-4 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${payMethod === 'UPI_QR'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : 'bg-slate-100 text-slate-800 border border-slate-200'
+                                  }`}
+                              >
+                                {payMethod === 'UPI_QR' ? 'UPI QR' : 'COD'}
+                              </span>
+
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${payStatus === 'PAID'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : payStatus === 'VERIFICATION'
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      : payStatus === 'FAILED'
+                                        ? 'bg-red-100 text-red-800 border border-red-200'
+                                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  }`}
+                              >
+                                {payStatus}
+                              </span>
+                            </div>
+
+                            {(o.utrNumber || o.paymentProofUrl) && (
+                              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                {o.utrNumber && (
+                                  <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    UTR: {o.utrNumber}
+                                  </span>
+                                )}
+                                {o.paymentProofUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPosProofPreviewUrl(o.paymentProofUrl)}
+                                    className="text-purple-700 hover:underline font-extrabold inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="w-3 h-3" /> Proof
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              {payStatus !== 'PAID' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdatePaymentStatus(o.id, 'PAID')}
+                                  className="px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition cursor-pointer"
+                                >
+                                  Mark as Paid
+                                </button>
+                              )}
+                              {payStatus !== 'FAILED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdatePaymentStatus(o.id, 'FAILED')}
+                                  className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-[10px] transition cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <p className="text-slate-600 max-w-[200px] line-clamp-1">{o.deliveryAddress}</p>
+                          </td>
+                          <td className="p-4">
+                            <select
+                              value={o.status}
+                              onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                              className={`border border-slate-200 rounded-lg p-1.5 focus:outline-none text-[13px] font-bold ${getStatusColor(o.status)}`}
                             >
-                              <MessageSquare className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              <option value="PLACED">PLACED</option>
+                              <option value="APPROVED">APPROVED</option>
+                              <option value="DISPATCHED">DISPATCHED</option>
+                              <option value="ACTIVE">ACTIVE</option>
+                              <option value="RETURNED">RETURNED</option>
+                              <option value="COMPLETED">COMPLETED</option>
+                              <option value="CANCELLED">CANCELLED</option>
+                            </select>
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleViewOrderDetails(o.id)}
+                                className="p-2 bg-brand-50 text-brand-600 hover:bg-brand-100 rounded-lg transition cursor-pointer"
+                                title="View Order Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => openWhatsappModal(o)}
+                                className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition cursor-pointer"
+                                title="Notify Customer on WhatsApp"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* TAB 2: CANCELLATIONS */}
           {activeTab === 'cancellations' && (
             <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
@@ -568,8 +912,8 @@ export default function AdminDashboard() {
                           </td>
                           <td className="p-4">
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${c.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
-                                c.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                                  'bg-red-100 text-red-700'
+                              c.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                'bg-red-100 text-red-700'
                               }`}>
                               {c.status}
                             </span>
@@ -603,7 +947,6 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 3: KYC SUBMISSIONS */}
           {activeTab === 'kyc' && (
             <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
@@ -631,7 +974,7 @@ export default function AdminDashboard() {
                           <td className="p-4">
                             {u.kycDocUrl ? (
                               <a
-                                href={u.kycDocUrl}
+                                href={getProductImageUrl(u.kycDocUrl)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-brand-600 hover:underline font-bold"
@@ -670,56 +1013,57 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 4: PRODUCTS & MAINTENANCE BLACKOUTS */}
           {activeTab === 'products' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-              {/* Product list */}
               <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
                 <h3 className="font-extrabold text-base text-slate-800">Current Inventory</h3>
                 <div className="space-y-3 max-h-[550px] overflow-y-auto pr-2 scrollbar-thin">
-                  {products.map((p) => (
-                    <div key={p.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={p.images.split(',')[0]}
-                          alt={p.name}
-                          className="w-10 h-10 object-cover rounded-lg bg-slate-100 border border-slate-200"
-                        />
-                        <div>
-                          <h4 className="font-bold text-xs text-slate-800 leading-tight">{p.name}</h4>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{p.category.name} | Dep: ₹{p.depositAmount} | Stock: {p.totalStock}</p>
+                  {products.map((p) => {
+                    const imgCount = parseProductImages(p.images).length;
+                    return (
+                      <div key={p.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getProductImageUrl(p.images)}
+                            alt={p.name}
+                            className="w-10 h-10 object-contain p-0.5 rounded-lg bg-white border border-slate-200"
+                          />
+                          <div>
+                            <h4 className="font-bold text-xs text-slate-800 leading-tight">{p.name}</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {p.category.name} | Dep: ₹{p.depositAmount} | Stock: {p.totalStock} | {imgCount} {imgCount === 1 ? 'photo' : 'photos'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-xs text-slate-800 shrink-0">₹{p.dailyRate}/d</span>
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => setEditingProduct(p)}
-                            className="p-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 transition cursor-pointer"
-                            title="Edit Listing"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition cursor-pointer"
-                            title="Delete Listing"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-xs text-slate-800 shrink-0">₹{p.dailyRate}/d</span>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => handleStartEditProduct(p)}
+                              className="p-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 transition cursor-pointer"
+                              title="Edit Listing, Specs, Box Items & Images"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(p.id)}
+                              className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition cursor-pointer"
+                              title="Delete Listing"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Operations forms */}
               <div className="lg:col-span-6 space-y-6">
 
-                {/* 1. Add Product Form */}
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                   <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 mb-4">
                     <Layers className="w-4 h-4 text-brand-600" /> Create New Equipment Listing
@@ -829,6 +1173,14 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    {renderProductImagesManager(
+                      newProduct.images,
+                      (nextImages) => setNewProduct((prev) => ({ ...prev, images: nextImages })),
+                      newImageUrlInput,
+                      setNewImageUrlInput,
+                      'create-product'
+                    )}
+
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">Description</label>
                       <textarea
@@ -840,26 +1192,25 @@ export default function AdminDashboard() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">Specifications (JSON Format)</label>
-                      <textarea
-                        value={newProduct.specs}
-                        onChange={(e) => setNewProduct({ ...newProduct, specs: e.target.value })}
-                        placeholder='{"Resolution": "4K", "Sensor": "Full Frame"}'
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-700 focus:outline-none font-mono text-[10px]"
-                        required
+                      <ProductSpecsEditor
+                        techSpecs={newTechSpecs}
+                        onChangeTechSpecs={setNewTechSpecs}
+                        boxItems={newBoxItems}
+                        onChangeBoxItems={setNewBoxItems}
+                        productName={newProduct.name || 'New Equipment Unit'}
+                        categoryName={getCategoryName(newProduct.categoryId) || 'Cameras'}
                       />
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-2.5 rounded-xl shadow-md transition"
+                      className="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-2.5 rounded-xl shadow-md transition cursor-pointer"
                     >
                       Publish Equipment Listing
                     </button>
                   </form>
                 </div>
 
-                {/* 2. Blockout Date Form */}
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                   <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 mb-4">
                     <Ban className="w-4 h-4 text-red-500" /> Apply Maintenance Blackout dates
@@ -929,7 +1280,8 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 5: USERS MANAGER */}
+          {activeTab === 'crew' && <CrewManager />}
+
           {activeTab === 'users' && (
             <div className="space-y-6">
 
@@ -965,8 +1317,8 @@ export default function AdminDashboard() {
                           <td className="p-4 text-slate-600">{u.phone || '—'}</td>
                           <td className="p-4">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wide ${u.role === 'ADMIN' ? 'bg-indigo-100 text-indigo-700' :
-                                u.role === 'VENDOR' ? 'bg-cyan-100 text-cyan-700' :
-                                  'bg-slate-100 text-slate-600'
+                              u.role === 'VENDOR' ? 'bg-cyan-100 text-cyan-700' :
+                                'bg-slate-100 text-slate-600'
                               }`}>
                               {u.role}
                             </span>
@@ -975,12 +1327,11 @@ export default function AdminDashboard() {
                             <select
                               value={u.kycStatus}
                               onChange={(e) => handleUpdateUserKycStatus(u.id, e.target.value)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold focus:outline-none border border-slate-200 cursor-pointer ${
-                                u.kycStatus === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' :
-                                u.kycStatus === 'PENDING' ? 'bg-yellow-50 text-yellow-700 border-yellow-250 animate-pulse' :
-                                u.kycStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
-                                'bg-slate-50 text-slate-500'
-                              }`}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold focus:outline-none border border-slate-200 cursor-pointer ${u.kycStatus === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' :
+                                  u.kycStatus === 'PENDING' ? 'bg-yellow-50 text-yellow-700 border-yellow-250 animate-pulse' :
+                                    u.kycStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
+                                      'bg-slate-50 text-slate-500'
+                                }`}
                             >
                               <option value="NONE">NONE</option>
                               <option value="PENDING">PENDING</option>
@@ -1009,7 +1360,6 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 6: USER INQUIRIES */}
           {activeTab === 'inquiries' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center pb-2">
@@ -1063,7 +1413,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL 1: ADD USER FORM */}
       {showAddUserModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 relative shadow-2xl border border-slate-100 animate-fade-in">
@@ -1150,13 +1499,12 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL 2: EDIT PRODUCT FORM */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-lg p-6 relative shadow-2xl border border-slate-100 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 relative shadow-2xl border border-slate-100 animate-fade-in">
             <button
               onClick={() => setEditingProduct(null)}
-              className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition"
+              className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1270,6 +1618,14 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              {renderProductImagesManager(
+                editingProduct.images || '',
+                (nextImages) => setEditingProduct({ ...editingProduct, images: nextImages }),
+                editImageUrlInput,
+                setEditImageUrlInput,
+                'edit-product'
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 mb-1">Description</label>
                 <textarea
@@ -1281,18 +1637,19 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">Specifications (JSON Format)</label>
-                <textarea
-                  value={editingProduct.specs}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, specs: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-700 focus:outline-none font-mono text-[10px]"
-                  required
+                <ProductSpecsEditor
+                  techSpecs={editTechSpecs}
+                  onChangeTechSpecs={setEditTechSpecs}
+                  boxItems={editBoxItems}
+                  onChangeBoxItems={setEditBoxItems}
+                  productName={editingProduct.name || 'Equipment Unit'}
+                  categoryName={getCategoryName(editingProduct.categoryId) || 'Cameras'}
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl shadow-md transition"
+                className="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl shadow-md transition cursor-pointer"
               >
                 Save Listing Changes
               </button>
@@ -1301,7 +1658,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL 3: WHATSAPP DISPATCH DISPATCHER */}
       {whatsappOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 relative shadow-2xl border border-slate-100 animate-fade-in">
@@ -1354,18 +1710,16 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL 4: ORDER DETAILS VIEW */}
       {selectedOrder && (
-        <div 
+        <div
           onClick={() => setSelectedOrder(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm cursor-pointer"
         >
-          <div 
+          <div
             onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl border border-slate-100 animate-fade-in flex flex-col cursor-default font-sans"
           >
-            
-            {/* Modal Header */}
+
             <div className="flex justify-between items-start pb-4 border-b border-slate-100 mb-6">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
@@ -1388,15 +1742,11 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="space-y-6 flex-1 text-sm">
-              
-              {/* Order Info & Cost Breakdown Grid */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Left Column: Customer & Delivery */}
+
                 <div className="space-y-4">
-                  {/* Customer Information */}
                   <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 space-y-2.5">
                     <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5 border-b border-slate-150 pb-1.5">
                       <Users className="w-4 h-4 text-slate-500" /> Customer Information
@@ -1407,12 +1757,11 @@ export default function AdminDashboard() {
                       <p className="text-slate-800"><strong className="text-slate-500 font-normal">Phone:</strong> {selectedOrder.user?.phone || 'N/A'}</p>
                     </div>
 
-                    {/* KYC Section */}
                     {selectedOrder.kycDocUrl && (
                       <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
                         <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">KYC Document</span>
                         <a
-                          href={selectedOrder.kycDocUrl}
+                          href={getProductImageUrl(selectedOrder.kycDocUrl)}
                           target="_blank"
                           rel="noreferrer"
                           className="bg-brand-50 hover:bg-brand-100 text-brand-600 font-bold px-3 py-1.5 rounded-lg transition inline-flex items-center gap-1 text-[13px] cursor-pointer"
@@ -1423,7 +1772,6 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                  {/* Delivery Details */}
                   <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 space-y-2.5">
                     <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5 border-b border-slate-150 pb-1.5">
                       <Package className="w-4 h-4 text-slate-500" /> Shipping & Delivery
@@ -1433,18 +1781,29 @@ export default function AdminDashboard() {
                         <strong className="text-slate-500 font-normal">Address:</strong> {selectedOrder.deliveryAddress}
                       </p>
                       {selectedOrder.deliveryDetails && (
-                        <p className="text-slate-600 bg-white/80 p-2 rounded-lg border border-slate-100 mt-2 italic leading-relaxed text-[13px]">
-                          <strong className="text-slate-500 not-italic block text-[12px] font-bold uppercase tracking-wider mb-0.5">Instructions:</strong>
-                          "{selectedOrder.deliveryDetails}"
-                        </p>
+                        <div className="mt-2 space-y-2">
+                          <p className="text-slate-600 bg-white/80 p-2.5 rounded-xl border border-slate-100 italic leading-relaxed text-[13px]">
+                            <strong className="text-slate-500 not-italic block text-[12px] font-bold uppercase tracking-wider mb-0.5">Instructions & Info:</strong>
+                            "{selectedOrder.deliveryDetails}"
+                          </p>
+
+                          {selectedOrder.deliveryDetails.includes('Custom Kit Contents:') && (
+                            <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 text-xs space-y-1">
+                              <span className="font-extrabold text-[#6D28D9] flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                                <Package className="w-3.5 h-3.5 text-[#6D28D9]" /> Dispatch Packing: Customized Box Items
+                              </span>
+                              <p className="text-slate-800 font-semibold leading-relaxed">
+                                {selectedOrder.deliveryDetails.split('Custom Kit Contents:')[1]?.split(' - [Payment')[0] || ''}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Right Column: Status & Costs */}
                 <div className="space-y-4 text-[13px]">
-                  {/* Status update box */}
                   <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 space-y-3">
                     <h4 className="font-extrabold text-slate-900 text-xs border-b border-slate-150 pb-1.5">
                       Order Status & Action
@@ -1469,7 +1828,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Financial Details */}
                   <div className="bg-slate-50/60 border border-slate-150 rounded-2xl p-4 space-y-2">
                     <h4 className="font-extrabold text-slate-900 text-xs border-b border-slate-150 pb-1.5">
                       Cost Breakdown
@@ -1497,12 +1855,11 @@ export default function AdminDashboard() {
 
               </div>
 
-              {/* Rented Equipment section */}
               <div className="space-y-3">
                 <h4 className="font-extrabold text-slate-950 text-xs flex items-center gap-1.5">
                   <Layers className="w-4.5 h-4.5 text-slate-700" /> Rented Equipment & Items
                 </h4>
-                
+
                 <div className="space-y-3">
                   {selectedOrder.items && selectedOrder.items.length > 0 ? (
                     selectedOrder.items.map((item: any) => {
@@ -1547,7 +1904,6 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* Modal Footer */}
             <div className="flex justify-between items-center pt-4 border-t border-slate-100 mt-6">
               <button
                 onClick={() => {
@@ -1570,12 +1926,43 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Loading Modal overlay */}
       {selectedOrderLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
             <RefreshCw className="w-8 h-8 text-brand-600 animate-spin" />
             <p className="text-xs font-bold text-slate-600">Fetching order details...</p>
+          </div>
+        </div>
+      )}
+
+      {proofPreviewUrl && (
+        <div
+          onClick={() => setPosProofPreviewUrl(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-lg w-full p-5 shadow-2xl border border-slate-100 space-y-4 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-extrabold text-sm text-slate-900">
+                UPI Payment Screenshot Proof
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPosProofPreviewUrl(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-center max-h-[70vh] overflow-auto border border-slate-200">
+              <img
+                src={proofPreviewUrl}
+                alt="Payment Proof Screenshot"
+                className="max-w-full max-h-[62vh] object-contain rounded-xl"
+              />
+            </div>
           </div>
         </div>
       )}

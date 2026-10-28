@@ -7,10 +7,8 @@ import { createNotification, notifyAdmins } from '../utils/notification';
 
 const router = Router();
 
-// Apply auth middleware to all endpoints
 router.use(authMiddleware);
 
-// Helper to generate order numbers
 function generateOrderNumber(): string {
   const date = new Date();
   const year = date.getFullYear();
@@ -20,7 +18,6 @@ function generateOrderNumber(): string {
   return `CR-${year}${month}${day}-${rand}`;
 }
 
-// 1. Checkout Endpoint
 router.post('/checkout', async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const {
@@ -36,7 +33,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Delivery address is required' });
   }
 
-  // Validate UTR if provided (must be 12 digits when present for UPI_QR)
   const cleanUtr = utrNumber ? String(utrNumber).trim() : '';
   if (cleanUtr && !/^\d{12}$/.test(cleanUtr)) {
     return res.status(400).json({ error: 'Invalid UTR number. Must be exactly 12 digits.' });
@@ -47,10 +43,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
       ? 'UPI_QR'
       : 'COD';
 
-  // Server determines initial payment status:
-  // Client-submitted paymentStatus is ignored to prevent tampering.
-  // If UTR (or payment proof) is provided for UPI_QR, status is VERIFICATION, otherwise PENDING.
-  // Transition to PAID is strictly reserved for Admin via PATCH /api/orders/:id/payment.
   const normalizedPaymentStatus =
     normalizedPaymentMethod === 'UPI_QR' && (cleanUtr || paymentProofUrl)
       ? 'VERIFICATION'
@@ -60,7 +52,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
     const isKycApproved = req.user!.kycStatus === 'APPROVED';
     const initialOrderStatus = isKycApproved ? 'PLACED' : 'PENDING_APPROVAL';
 
-    // Fetch user's cart items
     const cartItems = await prisma.cartItem.findMany({
       where: { userId },
       include: {
@@ -72,12 +63,10 @@ router.post('/checkout', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Your cart is empty' });
     }
 
-    // Validate all cart items for data integrity & business rules before checkout
     const now = new Date();
     const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
     for (const item of cartItems) {
-      // 1. Strict quantity check (integer 1..10)
       if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 10) {
         return res.status(400).json({
           error: 'Corrupted or Invalid Cart Item',
@@ -85,7 +74,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
         });
       }
 
-      // 2. Strict dates check
       const start = new Date(item.startDate);
       const end = new Date(item.endDate);
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -118,7 +106,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
         });
       }
 
-      // 3. Stock limit check
       if (item.quantity > item.product.totalStock) {
         return res.status(400).json({
           error: 'Stock Limit Exceeded',
@@ -126,7 +113,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
         });
       }
 
-      // 4. Verify availability for all items in a transaction-safe way
       const check = await checkProductAvailability(item.productId, item.startDate, item.endDate, item.quantity);
       if (!check.available) {
         return res.status(400).json({ 
@@ -136,16 +122,13 @@ router.post('/checkout', async (req: Request, res: Response) => {
       }
     }
 
-    // Calculate totals
     let totalRentalCost = 0;
     let totalDeposit = 0;
 
     const orderItemsData = cartItems.map((item) => {
-      // Calculate rental duration in days
       const diffTime = item.endDate.getTime() - item.startDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-      // Price calculation with daily/weekly rates
       let totalCost = 0;
       if (diffDays >= 7) {
         const weeks = Math.floor(diffDays / 7);
@@ -173,7 +156,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
       };
     });
 
-    // Check if user is placing their first order
     const priorOrdersCount = await prisma.order.count({
       where: { userId },
     });
@@ -185,7 +167,7 @@ router.post('/checkout', async (req: Request, res: Response) => {
     }
 
     const finalRentalCost = totalRentalCost - discountAmount;
-    const totalTax = finalRentalCost * 0.18; // 18% GST/VAT
+    const totalTax = finalRentalCost * 0.18;
     const grandTotal = finalRentalCost + totalDeposit + totalTax;
 
     const orderNumber = generateOrderNumber();
@@ -196,9 +178,7 @@ router.post('/checkout', async (req: Request, res: Response) => {
       cleanUtr ? `[UTR: ${cleanUtr}]` : paymentId ? `[Ref/Txn: ${paymentId}]` : '',
     ].filter(Boolean).join(' - ');
 
-    // Perform database writes in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 0. Enforce duplicate UTR uniqueness inside the write transaction
       if (cleanUtr) {
         const existingUtrOrder = await tx.order.findFirst({
           where: {
@@ -214,7 +194,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
         }
       }
 
-      // 1. Create order
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -231,11 +210,10 @@ router.post('/checkout', async (req: Request, res: Response) => {
           paymentStatus: normalizedPaymentStatus,
           utrNumber: cleanUtr || null,
           paymentProofUrl: paymentProofUrl ? String(paymentProofUrl) : null,
-          kycDocUrl: req.user!.kycDocUrl, // Snapshot the KYC doc link
+          kycDocUrl: req.user!.kycDocUrl,
         },
       });
 
-      // 2. Create order items
       await tx.orderItem.createMany({
         data: orderItemsData.map((item) => ({
           ...item,
@@ -243,7 +221,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
         })),
       });
 
-      // 3. Clear customer cart
       await tx.cartItem.deleteMany({
         where: { userId },
       });
@@ -251,7 +228,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
       return order;
     });
 
-    // Send WhatsApp notification
     const customerPhone = req.user!.phone;
     const waMsg = `Hello ${req.user!.name}, your CameraRent order #${orderNumber} for total ₹${grandTotal.toFixed(2)} ${isFirstOrder ? '(including a 10% first-time discount!) ' : ''}has been placed successfully! We will coordinate the verification shortly. Thank you!`;
     if (customerPhone) {
@@ -260,7 +236,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
       console.log(`[WhatsApp API Automated Send] To N/A: "${waMsg}" (Customer has no phone number)`);
     }
 
-    // Send notifications
     await createNotification(userId, 'Order Placed Successfully', `Your order #${orderNumber} has been placed successfully and is pending verification.`, 'ORDER_PLACED');
     await notifyAdmins('New Order Placed', `Order #${orderNumber} was placed by user ${req.user!.name || req.user!.email}.`, 'ORDER_PLACED');
 
@@ -281,7 +256,6 @@ router.post('/checkout', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Retrieve Orders List
 router.get('/', async (req: Request, res: Response) => {
   const { role, id: userId, vendorProfile } = req.user!;
 
@@ -301,7 +275,6 @@ router.get('/', async (req: Request, res: Response) => {
         return res.status(403).json({ error: 'Active vendor profile is required' });
       }
       
-      // Get orders that contain at least one product belonging to this vendor
       orders = await prisma.order.findMany({
         where: {
           items: {
@@ -313,14 +286,13 @@ router.get('/', async (req: Request, res: Response) => {
         include: {
           user: { select: { name: true, email: true, phone: true } },
           items: { 
-            where: { product: { vendorId: vendorProfile.id } }, // Filter down items visible to vendor
+            where: { product: { vendorId: vendorProfile.id } },
             include: { product: true },
           },
         },
         orderBy: { createdAt: 'desc' },
       });
     } else {
-      // CUSTOMER
       orders = await prisma.order.findMany({
         where: { userId },
         include: {
@@ -338,7 +310,6 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// 3. Admin dashboard KPIs
 router.get('/admin/dashboard', requireRole(['ADMIN']), async (req: Request, res: Response) => {
   try {
     const totalOrdersCount = await prisma.order.count();
@@ -351,8 +322,6 @@ router.get('/admin/dashboard', requireRole(['ADMIN']), async (req: Request, res:
       where: { status: 'ACTIVE' },
     });
 
-    // Check overdue returns: active orders where the maximum endDate is in the past
-    // For simplicity, we can search orders with status = ACTIVE that have an order item with endDate < now
     const now = new Date();
     const overdueRentals = await prisma.order.findMany({
       where: {
@@ -379,7 +348,6 @@ router.get('/admin/dashboard', requireRole(['ADMIN']), async (req: Request, res:
     
     const totalRevenue = completedOrders.reduce((sum, order) => sum + order.totalRentalCost, 0);
 
-    // Group sales data by date for chart (last 7 completed orders or summary)
     const salesSummary = await prisma.order.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
@@ -409,7 +377,6 @@ router.get('/admin/dashboard', requireRole(['ADMIN']), async (req: Request, res:
   }
 });
 
-// 4. Retrieve Single Order Detail
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { role, id: userId, vendorProfile } = req.user!;
@@ -434,19 +401,16 @@ router.get('/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Access check
     if (role === 'CUSTOMER' && order.userId !== userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     if (role === 'VENDOR') {
-      // Vendor can only view if order contains their product
       const hasVendorItem = order.items.some((item) => item.product.vendorId === vendorProfile?.id);
       if (!hasVendorItem) {
         return res.status(403).json({ error: 'Access denied. Order does not contain your products.' });
       }
       
-      // Filter out other vendors' items from details for privacy
       order.items = order.items.filter((item) => item.product.vendorId === vendorProfile?.id);
     }
 
@@ -457,10 +421,9 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 5. Update Order Status (ADMIN/VENDOR approval and flow)
 router.put('/:id/status', requireRole(['ADMIN', 'VENDOR']), async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { status } = req.body; // PLACED, APPROVED, DISPATCHED, ACTIVE, RETURNED, COMPLETED, CANCELLED
+  const { status } = req.body;
 
   const validStatuses = ['PLACED', 'APPROVED', 'DISPATCHED', 'ACTIVE', 'RETURNED', 'COMPLETED', 'CANCELLED'];
   if (!status || !validStatuses.includes(status)) {
@@ -479,7 +442,6 @@ router.put('/:id/status', requireRole(['ADMIN', 'VENDOR']), async (req: Request,
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Vendor verification: can only advance status if it's their gear
     if (req.user!.role === 'VENDOR') {
       const ownsAllGear = order.items.every((item) => item.product.vendorId === req.user!.vendorProfile?.id);
       if (!ownsAllGear) {
@@ -492,7 +454,6 @@ router.put('/:id/status', requireRole(['ADMIN', 'VENDOR']), async (req: Request,
       data: { status },
     });
 
-    // Retrieve customer user details for automated WhatsApp dispatch
     const customer = await prisma.user.findUnique({
       where: { id: order.userId }
     });
@@ -519,10 +480,9 @@ router.put('/:id/status', requireRole(['ADMIN', 'VENDOR']), async (req: Request,
   }
 });
 
-// 5b. Update Order Payment Status (ADMIN only: PAID / FAILED)
 router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { paymentStatus } = req.body; // PAID, FAILED, PENDING, VERIFICATION
+  const { paymentStatus } = req.body;
 
   const validPaymentStatuses = ['PAID', 'FAILED', 'PENDING', 'VERIFICATION'];
   if (!paymentStatus || !validPaymentStatuses.includes(paymentStatus)) {
@@ -540,7 +500,6 @@ router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: R
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Prevent cancelled orders from being marked as PAID
     if (order.status === 'CANCELLED' && paymentStatus === 'PAID') {
       return res.status(400).json({
         error: 'Cannot mark cancelled order as PAID',
@@ -575,7 +534,6 @@ router.patch('/:id/payment', requireRole(['ADMIN']), async (req: Request, res: R
   }
 });
 
-// 6. Request Cancellation (Customer)
 router.post('/:id/cancel', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { reason } = req.body;
@@ -594,7 +552,6 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Cancellation rule: cancellation request can only be submitted within 12 hours of order confirmation/creation
     const orderCreatedAt = new Date(order.createdAt).getTime();
     const elapsedHours = (Date.now() - orderCreatedAt) / (1000 * 60 * 60);
 
@@ -605,7 +562,6 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       });
     }
 
-    // Cancellation rule: cannot cancel if order is already dispatched/active/returned/completed
     const disallowedCancelStates = ['DISPATCHED', 'ACTIVE', 'RETURNED', 'COMPLETED', 'CANCELLED'];
     if (disallowedCancelStates.includes(order.status)) {
       return res.status(400).json({ 
@@ -614,7 +570,6 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if cancellation already requested
     const existing = await prisma.cancellationRequest.findUnique({
       where: { orderId: id },
     });
@@ -644,7 +599,6 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
   }
 });
 
-// 7. Get Pending Cancellations (Admin)
 router.get('/admin/cancellations', requireRole(['ADMIN']), async (req: Request, res: Response) => {
   try {
     const requests = await prisma.cancellationRequest.findMany({
@@ -664,10 +618,9 @@ router.get('/admin/cancellations', requireRole(['ADMIN']), async (req: Request, 
   }
 });
 
-// 8. Resolve Cancellation Request (Admin)
 router.put('/admin/cancellations/:requestId', requireRole(['ADMIN']), async (req: Request, res: Response) => {
   const { requestId } = req.params;
-  const { action } = req.body; // "APPROVE" or "REJECT"
+  const { action } = req.body;
 
   if (!action || !['APPROVE', 'REJECT'].includes(action)) {
     return res.status(400).json({ error: 'Action must be APPROVE or REJECT' });
@@ -690,7 +643,6 @@ router.put('/admin/cancellations/:requestId', requireRole(['ADMIN']), async (req
     const statusValue = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
 
     const result = await prisma.$transaction(async (tx) => {
-      // Update request status
       const updatedRequest = await tx.cancellationRequest.update({
         where: { id: requestId },
         data: {
@@ -700,7 +652,6 @@ router.put('/admin/cancellations/:requestId', requireRole(['ADMIN']), async (req
         },
       });
 
-      // If approved, update order status to CANCELLED
       if (action === 'APPROVE') {
         await tx.order.update({
           where: { id: request.orderId },
@@ -736,7 +687,6 @@ router.put('/admin/cancellations/:requestId', requireRole(['ADMIN']), async (req
   }
 });
 
-// 10. Trigger First-Time Discount WhatsApp Inquiry
 router.post('/first-discount-inquiry', async (req: Request, res: Response) => {
   const customerPhone = req.user!.phone;
   const waMsg = `Hello camerarent, I’m renting for the first time. How can I avail the 10% off?`;
